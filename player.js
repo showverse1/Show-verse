@@ -246,8 +246,12 @@ export function showMainPlayerControls() {
   }
 }
 
+export function getMainVideoElement() {
+  return document.getElementById('main-video') || document.getElementById('ytVideo');
+}
+
 export function hideMainPlayerControls() {
-  const video = document.getElementById('ytVideo');
+  const video = getMainVideoElement();
   const uiWrapper = document.getElementById('main-player-ui-wrapper');
   const stage = document.getElementById('ytPlayerStage');
   if (!stage) return;
@@ -284,7 +288,7 @@ export function resetMainPlayerControlsTimer() {
   showMainPlayerControls();
 
   const stage = document.getElementById('ytPlayerStage');
-  const video = document.getElementById('ytVideo');
+  const video = getMainVideoElement();
   if (!stage) return;
 
   // If paused or ended, controls remain visible indefinitely
@@ -312,6 +316,62 @@ export function hideYtBufferingSpinner() {
     spinner.classList.add('hidden');
     spinner.style.opacity = '0';
   }
+}
+
+export function skipMainVideo(seconds) {
+  const mainVideo = getMainVideoElement();
+  if (!mainVideo) return;
+
+  const cur = mainVideo.currentTime;
+  if (typeof cur !== 'number' || isNaN(cur)) return;
+
+  const step = Number(seconds) || 10;
+  let targetTime = cur + step;
+
+  const dur = mainVideo.duration;
+  if (Number.isFinite(dur) && dur > 0) {
+    targetTime = Math.max(0, Math.min(dur, targetTime));
+  } else {
+    targetTime = Math.max(0, targetTime);
+  }
+
+  if (Number.isFinite(targetTime) && !isNaN(targetTime)) {
+    mainVideo.currentTime = targetTime;
+  }
+
+  if (typeof window.triggerYtSkipAnimation === 'function') {
+    window.triggerYtSkipAnimation(step);
+  }
+  resetMainPlayerControlsTimer();
+}
+
+export function seekMainVideo(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  const mainVideo = getMainVideoElement();
+  const mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
+  if (!mainVideo || !mainProgressBar) return;
+
+  const duration = mainVideo.duration;
+  if (!Number.isFinite(duration) || duration <= 0 || isNaN(duration)) {
+    return;
+  }
+
+  const barWidth = mainProgressBar.offsetWidth;
+  if (!barWidth || barWidth <= 0) return;
+
+  // Accurately calculate (e.offsetX / mainProgressBar.offsetWidth) * mainVideo.duration
+  let clickX = (e && typeof e.offsetX === 'number' && !isNaN(e.offsetX) && e.currentTarget === mainProgressBar)
+    ? e.offsetX
+    : ((e && typeof e.clientX === 'number') ? (e.clientX - mainProgressBar.getBoundingClientRect().left) : 0);
+
+  clickX = Math.max(0, Math.min(barWidth, clickX));
+
+  const newTime = (clickX / barWidth) * duration;
+  if (Number.isFinite(newTime) && !isNaN(newTime)) {
+    mainVideo.currentTime = newTime;
+  }
+
+  resetMainPlayerControlsTimer();
 }
 
 export function setupMainPlayerVideoListeners(video) {
@@ -346,7 +406,7 @@ export function setupMainPlayerVideoListeners(video) {
 
 export function initMainPlayerControlsAutoHide() {
   const stage = document.getElementById('ytPlayerStage');
-  const video = document.getElementById('ytVideo');
+  const video = getMainVideoElement();
   if (!stage) return;
 
   if (stage._mainAutoHideInitialized) {
@@ -364,12 +424,11 @@ export function initMainPlayerControlsAutoHide() {
   stage.addEventListener('mousemove', onUserActivity);
   stage.addEventListener('pointermove', onUserActivity);
   stage.addEventListener('pointerdown', onUserActivity);
-  stage.addEventListener('click', onUserActivity);
   stage.addEventListener('touchstart', onUserActivity, { passive: true });
   stage.addEventListener('touchmove', onUserActivity, { passive: true });
 
   stage.addEventListener('mouseleave', () => {
-    const v = document.getElementById('ytVideo');
+    const v = getMainVideoElement();
     if (v && !v.paused && !v.ended) {
       if (mainControlsFadeTimer) {
         clearTimeout(mainControlsFadeTimer);
@@ -378,6 +437,34 @@ export function initMainPlayerControlsAutoHide() {
       hideMainPlayerControls();
     }
   });
+
+  // Dedicated button click bindings for main skip forward/backward and progress bar
+  const skipFwd = document.getElementById('main-skip-forward');
+  if (skipFwd && !skipFwd._skipBound) {
+    skipFwd._skipBound = true;
+    skipFwd.addEventListener('click', (e) => {
+      e.stopPropagation();
+      skipMainVideo(10);
+    });
+  }
+
+  const skipBack = document.getElementById('main-skip-backward');
+  if (skipBack && !skipBack._skipBound) {
+    skipBack._skipBound = true;
+    skipBack.addEventListener('click', (e) => {
+      e.stopPropagation();
+      skipMainVideo(-10);
+    });
+  }
+
+  const progBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
+  if (progBar && !progBar._scrubBound) {
+    progBar._scrubBound = true;
+    progBar.addEventListener('click', (e) => {
+      e.stopPropagation();
+      seekMainVideo(e);
+    });
+  }
 
   if (video) {
     setupMainPlayerVideoListeners(video);
@@ -852,4 +939,9 @@ if (typeof window !== "undefined") {
   window.setupMainPlayerVideoListeners = setupMainPlayerVideoListeners;
   window.showYtBufferingSpinner = showYtBufferingSpinner;
   window.hideYtBufferingSpinner = hideYtBufferingSpinner;
+  window.skipMainVideo = skipMainVideo;
+  window.seekMainVideo = seekMainVideo;
+  window.skipYtTime = skipMainVideo;
+  window.seekYtVideo = seekMainVideo;
+  window.getMainVideoElement = getMainVideoElement;
 }

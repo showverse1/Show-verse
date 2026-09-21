@@ -788,7 +788,7 @@ export function openShowPlayerPage(showKeyOrTitle, episodeIndex = 0, resumeTime 
 function loadActiveYtEpisode(index, resumeTime = 0) {
   if (!currentSelectedShow || !currentSelectedShow.episodes[index]) return;
   const episode = currentSelectedShow.episodes[index];
-  const video = document.getElementById('ytVideo');
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
   const curEpTitle = document.getElementById('ytCurrentEpisodeTitle');
   const badgeQuality = document.getElementById('ytBadgeQuality');
 
@@ -987,7 +987,7 @@ export function closeShowPlayerPage() {
 }
 
 function initYtVideoListeners() {
-  const video = document.getElementById('ytVideo');
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
   if (!video) return;
 
   let lastSave = 0;
@@ -996,8 +996,8 @@ function initYtVideoListeners() {
     const dur = video.duration;
     if (!Number.isFinite(dur) || dur <= 0 || !Number.isFinite(cur)) return;
     const pct = Math.max(0, Math.min(100, (cur / dur) * 100));
-    const progressBar = document.getElementById('ytProgressBar');
-    const timeDisplay = document.getElementById('ytTimeDisplay');
+    const progressBar = document.getElementById('main-progress-fill') || document.getElementById('ytProgressBar');
+    const timeDisplay = document.getElementById('main-time-display') || document.getElementById('ytTimeDisplay');
     if (progressBar) progressBar.style.width = `${pct}%`;
     if (timeDisplay) timeDisplay.innerText = `${formatDuration(cur)} / ${formatDuration(dur)}`;
 
@@ -1049,7 +1049,7 @@ function initYtVideoListeners() {
 }
 
 export function toggleYtPlay() {
-  const video = document.getElementById('ytVideo');
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
   if (!video) return;
   if (video.paused) {
     video.play();
@@ -1065,7 +1065,7 @@ export function toggleYtPlay() {
 }
 
 export function pauseYtVideo() {
-  const video = document.getElementById('ytVideo');
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
   if (video && !video.paused) {
     video.pause();
     updateYtPlayIcon(false);
@@ -1110,7 +1110,7 @@ export function triggerYtSkipAnimation(seconds) {
 }
 
 export function handleYtPlayerTap(e) {
-  if (e.target.closest('button, input, select, a, #ytScrubContainer, #main-player-ui-wrapper .space-y-3, #main-player-ui-wrapper .pointer-events-auto, #ytControlsOverlay')) {
+  if (e.target.closest('button, input, select, a, #main-progress-bar, #ytScrubContainer, #main-player-ui-wrapper .space-y-3, #main-player-ui-wrapper .pointer-events-auto, #ytControlsOverlay')) {
     return;
   }
   const stage = document.getElementById('ytPlayerStage');
@@ -1137,9 +1137,9 @@ export function handleYtPlayerTap(e) {
     }
     ytLastTapTime = 0;
     if (tapX < width * 0.42) {
-      skipYtTime(-10);
+      skipMainVideo(-10);
     } else if (tapX > width * 0.58) {
-      skipYtTime(10);
+      skipMainVideo(10);
     } else {
       toggleYtPlay();
     }
@@ -1154,26 +1154,67 @@ export function handleYtPlayerTap(e) {
   }
 }
 
-export function skipYtTime(seconds) {
-  const video = document.getElementById('ytVideo');
-  if (!video || !Number.isFinite(video.duration)) return;
-  const target = Math.max(0, Math.min(video.duration, video.currentTime + Number(seconds)));
-  video.currentTime = target;
-  triggerYtSkipAnimation(seconds);
-}
+export function skipMainVideo(seconds) {
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
+  if (!video) return;
+  const cur = video.currentTime;
+  if (typeof cur !== 'number' || isNaN(cur)) return;
 
-export function seekYtVideo(e) {
-  const video = document.getElementById('ytVideo');
-  const bar = document.getElementById('ytScrubContainer');
-  if (!video || !bar || !Number.isFinite(video.duration)) return;
-  const rect = bar.getBoundingClientRect();
-  if (!rect.width) return;
-  const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  video.currentTime = pos * video.duration;
+  const step = Number(seconds) || 10;
+  let target = cur + step;
+
+  const dur = video.duration;
+  if (Number.isFinite(dur) && dur > 0) {
+    target = Math.max(0, Math.min(dur, target));
+  } else {
+    target = Math.max(0, target);
+  }
+
+  if (Number.isFinite(target) && !isNaN(target)) {
+    video.currentTime = target;
+  }
+
+  triggerYtSkipAnimation(step);
+  if (typeof window.resetMainPlayerControlsTimer === 'function') {
+    window.resetMainPlayerControlsTimer();
+  }
 }
+export const skipYtTime = skipMainVideo;
+
+export function seekMainVideo(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
+  const bar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
+  if (!video || !bar) return;
+
+  const duration = video.duration;
+  if (!Number.isFinite(duration) || duration <= 0 || isNaN(duration)) {
+    return;
+  }
+
+  const barWidth = bar.offsetWidth;
+  if (!barWidth || barWidth <= 0) return;
+
+  // Accurately calculate (e.offsetX / mainProgressBar.offsetWidth) * mainVideo.duration
+  let clickX = (e && typeof e.offsetX === 'number' && !isNaN(e.offsetX) && e.currentTarget === bar)
+    ? e.offsetX
+    : ((e && typeof e.clientX === 'number') ? (e.clientX - bar.getBoundingClientRect().left) : 0);
+
+  clickX = Math.max(0, Math.min(barWidth, clickX));
+
+  const newTime = (clickX / barWidth) * duration;
+  if (Number.isFinite(newTime) && !isNaN(newTime)) {
+    video.currentTime = newTime;
+  }
+
+  if (typeof window.resetMainPlayerControlsTimer === 'function') {
+    window.resetMainPlayerControlsTimer();
+  }
+}
+export const seekYtVideo = seekMainVideo;
 
 export function changeYtVolume(val) {
-  const video = document.getElementById('ytVideo');
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
   if (!video) return;
   video.volume = Math.max(0, Math.min(1, Number(val)));
   const icon = document.getElementById('ytVolumeIcon');
@@ -1184,7 +1225,7 @@ export function changeYtVolume(val) {
 }
 
 export function toggleYtMute() {
-  const video = document.getElementById('ytVideo');
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
   if (!video) return;
   video.muted = !video.muted;
   const slider = document.getElementById('ytVolumeSlider');
@@ -1229,7 +1270,7 @@ export function toggleYtFullscreen() {
 export function toggleFullscreenPlayerModal() {
   if (currentSelectedShow && currentSelectedShow.episodes[currentSelectedEpisodeIndex]) {
     const ep = currentSelectedShow.episodes[currentSelectedEpisodeIndex];
-    const video = document.getElementById('ytVideo');
+    const video = document.getElementById('main-video') || document.getElementById('ytVideo');
     const curTime = video ? video.currentTime : 0;
     pauseYtVideo();
     if (typeof window.playMedia === 'function') {
@@ -1268,8 +1309,10 @@ if (typeof window !== "undefined") {
   window.toggleYtPlay = toggleYtPlay;
   window.handleYtPlayerTap = handleYtPlayerTap;
   window.triggerYtSkipAnimation = triggerYtSkipAnimation;
-  window.skipYtTime = skipYtTime;
-  window.seekYtVideo = seekYtVideo;
+  window.skipMainVideo = skipMainVideo;
+  window.seekMainVideo = seekMainVideo;
+  window.skipYtTime = skipMainVideo;
+  window.seekYtVideo = seekMainVideo;
   window.changeYtVolume = changeYtVolume;
   window.toggleYtMute = toggleYtMute;
   window.toggleYtAmbient = toggleYtAmbient;

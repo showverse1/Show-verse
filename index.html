@@ -436,7 +436,7 @@
     <!-- The 16:9 Video Player -->
     <div class="space-y-4">
       <div id="ytPlayerStage" onclick="handleYtPlayerTap(event)" class="relative w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden bg-black shadow-2xl border border-white/10 yt-player-glow group select-none cursor-pointer">
-        <video id="ytVideo" class="w-full h-full object-contain" playsinline preload="metadata">
+        <video id="main-video" class="w-full h-full object-contain" playsinline preload="metadata">
           <track id="ytSubtitleTrack" kind="subtitles" srclang="en" label="English CC" default>
         </video>
         
@@ -488,23 +488,23 @@
 
           <div id="mainPlayerBottomBar" class="pointer-events-auto space-y-3">
             <div class="flex items-center gap-3">
-              <span id="ytTimeDisplay" class="text-xs font-mono text-slate-300 w-24">00:00 / 00:00</span>
-              <div id="ytScrubContainer" onclick="seekYtVideo(event)" class="relative flex-1 h-3 flex items-center cursor-pointer group/bar">
-                <div class="w-full h-1.5 bg-white/20 rounded-full overflow-hidden relative">
-                  <div id="ytBufferedBar" class="absolute top-0 left-0 bottom-0 bg-white/30 w-0 transition-all"></div>
-                  <div id="ytProgressBar" class="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-brand-cyan to-indigo-500 w-0 shadow-neon-cyan"></div>
+              <span id="main-time-display" class="text-xs font-mono text-slate-300 w-24">00:00 / 00:00</span>
+              <div id="main-progress-bar" onclick="seekMainVideo(event)" class="relative flex-1 h-3 flex items-center cursor-pointer group/bar">
+                <div class="w-full h-1.5 bg-white/20 rounded-full overflow-hidden relative pointer-events-none">
+                  <div id="ytBufferedBar" class="absolute top-0 left-0 bottom-0 bg-white/30 w-0 transition-all pointer-events-none"></div>
+                  <div id="main-progress-fill" class="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-brand-cyan to-indigo-500 w-0 shadow-neon-cyan pointer-events-none"></div>
                 </div>
               </div>
             </div>
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-2 sm:gap-3">
-                <button onclick="toggleYtPlay()" class="p-2.5 rounded-xl bg-brand-cyan text-black hover:bg-cyan-300 shadow-neon-cyan transition cursor-pointer">
+                <button id="main-play-btn" onclick="toggleYtPlay()" class="p-2.5 rounded-xl bg-brand-cyan text-black hover:bg-cyan-300 shadow-neon-cyan transition cursor-pointer">
                   <i data-lucide="play" id="ytPlayIcon" class="w-4 h-4 fill-black"></i>
                 </button>
-                <button onclick="skipYtTime(-10)" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Rewind 10s">
+                <button id="main-skip-backward" onclick="skipMainVideo(-10)" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Rewind 10s">
                   <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
                 </button>
-                <button onclick="skipYtTime(10)" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Fast-forward 10s">
+                <button id="main-skip-forward" onclick="skipMainVideo(10)" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Fast-forward 10s">
                   <i data-lucide="rotate-cw" class="w-4 h-4"></i>
                 </button>
                 <div class="hidden sm:flex items-center gap-2 ml-2">

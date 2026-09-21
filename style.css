@@ -93,6 +93,7 @@
 }
 
 #ytPlayerStage.controls-hidden,
+#ytPlayerStage.controls-hidden #main-video,
 #ytPlayerStage.controls-hidden #ytVideo {
   cursor: none !important;
 }
@@ -253,7 +254,9 @@
   border: none !important;
 }
 
+#ytPlayerStage:fullscreen #main-video,
 #ytPlayerStage:fullscreen #ytVideo,
+#ytPlayerStage:-webkit-full-screen #main-video,
 #ytPlayerStage:-webkit-full-screen #ytVideo {
   object-fit: contain !important;
   width: 100% !important;
