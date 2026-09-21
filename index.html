@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Show Verse - Stream Anime, Kdrama, C-Drama & 4K Movies</title>
+  <meta name="description" content="Next-gen streaming experience for Anime, Kdrama, Chinese Drama, and 4K Movies with ambient glow and dynamic Firestore synchronization." />
+  <meta property="og:title" content="Show Verse - Stream Anime, Kdrama, C-Drama & 4K Movies" />
+  <meta property="og:description" content="Next-gen streaming experience for Anime, Kdrama, Chinese Drama, and 4K Movies with ambient glow and dynamic Firestore synchronization." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2300F0FF'><path d='M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5'/></svg>" />
+  <!-- Google Fonts: Syne & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Syne:wght@700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Universal circular structure protection for JSON.stringify and console logging -->
+  <script>
+    (function() {
+      const nativeStringify = JSON.stringify;
+      JSON.stringify = function(value, replacer, space) {
+        const seen = new WeakSet();
+        const circularReplacer = function(key, val) {
+          if (typeof val === 'object' && val !== null) {
+            if (seen.has(val)) return undefined;
+            seen.add(val);
+          }
+          if (typeof replacer === 'function') return replacer.call(this, key, val);
+          return val;
+        };
+        try {
+          return nativeStringify(value, circularReplacer, space);
+        } catch (e) {
+          try { return nativeStringify(String(value)); } catch (_) { return '""'; }
+        }
+      };
+      ['log', 'warn', 'error', 'info', 'debug'].forEach(function(method) {
+        const original = console[method];
+        if (typeof original === 'function') {
+          console[method] = function(...args) {
+            const sanitized = args.map(arg => {
+              if (arg instanceof Error) return arg.message || String(arg);
+              if (typeof arg === 'object' && arg !== null) {
+                try { JSON.stringify(arg); return arg; } catch (_) { return String(arg); }
+              }
+              return arg;
+            });
+            return original.apply(console, sanitized);
+          };
+        }
+      });
+    })();
+  </script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- HLS.js for .m3u8 adaptive streaming support -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              cyan: '#00F0FF',
+              magenta: '#FF003C',
+              purple: '#7000FF',
+              dark: '#07090E',
+              card: '#0D111A',
+              border: '#1E2638'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            display: ['"Syne"', 'sans-serif']
+          },
+          boxShadow: {
+            'neon-cyan': '0 0 25px rgba(0, 240, 255, 0.45)',
+            'neon-magenta': '0 0 25px rgba(255, 0, 60, 0.45)',
+            'neon-ambient': '0 0 80px rgba(0, 240, 255, 0.25)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #07090E; }
+    ::-webkit-scrollbar-thumb { background: #1E2638; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #00F0FF; }
+    .glass-card {
+      background: rgba(13, 17, 26, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-nav {
+      background: rgba(7, 9, 14, 0.85);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .text-gradient {
+      background: linear-gradient(135deg, #FFFFFF 20%, #00F0FF 70%, #7000FF 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .ambient-glow-box {
+      box-shadow: 0 0 90px 20px rgba(0, 240, 255, 0.35);
+      transition: box-shadow 0.5s ease-in-out;
+    }
+    ::cue {
+      background: rgba(0, 0, 0, 0.85);
+      color: #00F0FF;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 700;
+      text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+      font-size: 1.1rem;
+      border-radius: 6px;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #00F0FF;
+      cursor: pointer;
+      box-shadow: 0 0 10px #00F0FF;
+    }
+    .tilt-card {
+      transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s ease;
+    }
+    .tilt-card:hover {
+      transform: translateY(-6px) scale(1.02);
+      box-shadow: 0 15px 35px -10px rgba(0, 240, 255, 0.25);
+    }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+
+  <!-- Show Verse Video Player & Fullscreen/Landscape Styles -->
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="bg-brand-dark text-slate-100 font-sans antialiased selection:bg-brand-cyan selection:text-black min-h-screen">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header id="mainNav" class="fixed top-0 left-0 right-0 z-40 glass-nav transition-all duration-300 px-4 md:px-12 py-3.5 flex items-center justify-between">
+    <!-- Brand Logo (Left) -->
+    <a href="#" onclick="filterCategoryView('All')" class="flex items-center gap-2.5 group">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-cyan via-brand-purple to-brand-magenta p-0.5 shadow-neon-cyan group-hover:scale-105 transition duration-300">
+        <div class="w-full h-full bg-brand-dark rounded-[10px] flex items-center justify-center">
+          <i data-lucide="play" class="w-4 h-4 text-brand-cyan fill-brand-cyan"></i>
+        </div>
+      </div>
+      <span class="text-xl font-black tracking-wider text-white">SHOW<span class="text-brand-cyan">VERSE</span></span>
+    </a>
+
+    <!-- Center Quick Search Bar -->
+    <div class="hidden md:flex items-center flex-1 max-w-md mx-8">
+      <div class="relative w-full cursor-pointer" onclick="openSearchModal()">
+        <i data-lucide="search" class="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400"></i>
+        <div class="w-full bg-white/5 hover:bg-white/10 border border-white/10 rounded-full py-2 pl-10 pr-4 text-xs text-slate-400 flex items-center justify-between transition">
+          <span>Search Anime, Kdrama, Movies...</span>
+          <kbd class="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-slate-300 font-mono">⌘K</kbd>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Profile (Me) Avatar (Right) -->
+    <div class="flex items-center gap-2.5">
+      <button onclick="openSearchModal()" class="md:hidden p-2 rounded-full bg-white/5 text-slate-300 hover:text-white" title="Search">
+        <i data-lucide="search" class="w-4 h-4"></i>
+      </button>
+      <button id="profileMenuBtn" onclick="openMeModal()" class="flex items-center gap-2.5 p-1.5 pl-2 pr-3 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 hover:border-brand-cyan/40 transition cursor-pointer" title="Profile (Me)">
+        <div class="w-7 h-7 rounded-full bg-white/10 text-slate-300 flex items-center justify-center font-bold text-xs" id="navAvatar">
+          ?
+        </div>
+        <span class="text-xs font-semibold hidden sm:inline text-slate-200" id="navUsername">Guest</span>
+        <i data-lucide="user" class="w-3.5 h-3.5 text-slate-400"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- TOP CATEGORY FILTER BAR -->
+  <nav id="topCategoryBar" class="fixed top-[60px] left-0 right-0 z-30 bg-brand-dark/90 backdrop-blur-xl border-b border-white/10 px-4 md:px-12 py-2.5 transition-all duration-300">
+    <div class="flex items-center justify-between gap-3 max-w-7xl mx-auto">
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5" id="categoryChipsContainer">
+        <button onclick="filterCategoryView('All')" id="chip-All" class="category-filter-chip active px-4 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-2 bg-brand-cyan text-black shadow-neon-cyan whitespace-nowrap cursor-pointer">
+          <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i> All
+        </button>
+        <button onclick="filterCategoryView('Kdrama')" id="chip-Kdrama" class="category-filter-chip px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 glass-card hover:bg-white/15 border border-white/15 text-white whitespace-nowrap cursor-pointer">
+          <i data-lucide="heart" class="w-3.5 h-3.5 text-rose-400"></i> Kdrama
+          <span id="badge-count-Kdrama" class="text-[10px] px-1.5 py-0.2 bg-white/10 rounded-full font-mono text-rose-300">0</span>
+        </button>
+        <button onclick="filterCategoryView('Anime')" id="chip-Anime" class="category-filter-chip px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 glass-card hover:bg-white/15 border border-white/15 text-white whitespace-nowrap cursor-pointer">
+          <i data-lucide="zap" class="w-3.5 h-3.5 text-brand-cyan"></i> Anime
+          <span id="badge-count-Anime" class="text-[10px] px-1.5 py-0.2 bg-white/10 rounded-full font-mono text-brand-cyan">0</span>
+        </button>
+        <button onclick="filterCategoryView('Chinese Drama')" id="chip-ChineseDrama" class="category-filter-chip px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 glass-card hover:bg-white/15 border border-white/15 text-white whitespace-nowrap cursor-pointer">
+          <i data-lucide="flame" class="w-3.5 h-3.5 text-amber-400"></i> Chinese Drama
+          <span id="badge-count-ChineseDrama" class="text-[10px] px-1.5 py-0.2 bg-white/10 rounded-full font-mono text-amber-300">0</span>
+        </button>
+        <button onclick="filterCategoryView('Movie')" id="chip-Movie" class="category-filter-chip px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-2 glass-card hover:bg-white/15 border border-white/15 text-white whitespace-nowrap cursor-pointer">
+          <i data-lucide="film" class="w-3.5 h-3.5 text-brand-purple"></i> Movies
+          <span id="badge-count-Movie" class="text-[10px] px-1.5 py-0.2 bg-white/10 rounded-full font-mono text-purple-300">0</span>
+        </button>
+      </div>
+      <div id="categoryActiveIndicator" class="hidden sm:inline-flex text-[11px] font-semibold text-brand-cyan bg-brand-cyan/10 border border-brand-cyan/20 px-2.5 py-0.5 rounded-full whitespace-nowrap">
+        All Categories Active
+      </div>
+    </div>
+  </nav>
+
+  <!-- ======================================================== -->
+  <!-- 1. MAIN HOMEPAGE VIEW (WRAPPER) -->
+  <!-- ======================================================== -->
+  <div id="homeView" class="transition-opacity duration-300 pt-[52px]">
+    <!-- HERO SECTION -->
+    <section id="heroSection" class="relative min-h-[85vh] md:min-h-[92vh] flex items-end pb-20 md:pb-28 px-4 md:px-12 overflow-hidden">
+      <!-- Carousel Backdrop -->
+      <div id="heroBackdrops" class="absolute inset-0 -z-10 transition-opacity duration-1000">
+        <img id="heroImage" src="https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=2000&q=80" alt="Hero Banner" class="w-full h-full object-cover object-center filter brightness-[0.6] contrast-[1.12]" />
+        <div class="absolute inset-0 bg-gradient-to-t from-brand-dark via-brand-dark/50 to-transparent"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-brand-dark via-brand-dark/70 to-transparent"></div>
+      </div>
+      <!-- Hero Content -->
+      <div class="max-w-3xl z-10 space-y-4">
+        <div class="flex items-center gap-2.5 flex-wrap">
+          <span class="px-2.5 py-1 rounded-full bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan text-xs font-extrabold tracking-wider uppercase flex items-center gap-1.5 shadow-neon-cyan">
+            <span class="w-2 h-2 rounded-full bg-brand-cyan animate-pulse"></span> FEATURED TITLE
+          </span>
+          <span class="px-2.5 py-1 rounded-full bg-white/10 border border-white/10 text-slate-200 text-xs font-bold">
+            4K MASTER • DOLBY ATMOS
+          </span>
+        </div>
+        <h1 id="heroTitle" class="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-gradient leading-none">
+          SHOW VERSE
+        </h1>
+        <p id="heroDesc" class="text-sm md:text-base text-slate-300 max-w-xl line-clamp-3 leading-relaxed">
+          Streaming the latest high-bitrate episodes in Anime, Kdrama, Chinese Drama, and Feature Movies with ambient glow and Dolby audio.
+        </p>
+        <!-- Action Button -->
+        <div class="pt-2 flex items-center gap-3.5 flex-wrap">
+          <button id="heroPlayBtn" class="px-7 py-3 rounded-xl bg-brand-cyan hover:bg-cyan-300 text-black font-extrabold text-sm flex items-center gap-2.5 shadow-neon-cyan hover:scale-105 transition-all cursor-pointer">
+            <i data-lucide="play" class="w-4 h-4 fill-black"></i> Play
+          </button>
+          <button onclick="toggleHeroMute()" id="heroMuteBtn" class="p-3 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/15 text-white transition cursor-pointer" title="Toggle Cinematic Preview">
+            <i data-lucide="volume-2" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MAIN BROWSING ROWS -->
+    <main class="relative z-10 -mt-8 pb-28 px-4 md:px-12 space-y-10">
+      <!-- CONTINUE WATCHING -->
+      <section id="section-ContinueWatching" class="transition-all duration-300">
+        <div class="flex items-center justify-between mb-3.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2 h-6 bg-brand-cyan rounded-full shadow-neon-cyan"></div>
+            <h2 class="text-lg md:text-xl font-black tracking-wide text-white">Continue Watching</h2>
+            <span id="continueWatchingCount" class="text-xs text-slate-400 font-mono">0 In Progress</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="scrollSlider('continueWatchingRow', -360)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-brand-cyan transition cursor-pointer" title="Scroll Left">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="scrollSlider('continueWatchingRow', 360)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-brand-cyan transition cursor-pointer" title="Scroll Right">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div id="continueWatchingRow" class="category-slider-row flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth snap-x">
+          <!-- Rendered via init.js -->
+        </div>
+      </section>
+
+      <!-- TRENDING NOW -->
+      <section id="section-Trending" class="transition-all duration-300">
+        <div class="flex items-center justify-between mb-3.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2 h-6 bg-gradient-to-b from-brand-cyan to-indigo-500 rounded-full shadow-neon-cyan"></div>
+            <h2 class="text-lg md:text-xl font-black tracking-wide text-white">Trending Now</h2>
+            <span class="text-xs text-brand-cyan font-semibold px-2.5 py-0.5 rounded-full bg-brand-cyan/10 border border-brand-cyan/20" id="header-count-Trending">Top Ranked</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="scrollSlider('trendingRow', -450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-brand-cyan transition cursor-pointer" title="Scroll Left">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="scrollSlider('trendingRow', 450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-brand-cyan transition cursor-pointer" title="Scroll Right">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div id="trendingRow" class="category-slider-row flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth snap-x"></div>
+      </section>
+
+      <!-- KDRAMAS -->
+      <section id="section-Kdrama" class="category-row-section transition-all duration-300">
+        <div class="flex items-center justify-between mb-3.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2 h-6 bg-rose-500 rounded-full shadow-[0_0_15px_rgba(244,63,94,0.5)]"></div>
+            <h2 class="text-lg md:text-xl font-black tracking-wide text-white">Trending Kdramas</h2>
+            <span class="text-xs text-rose-400 font-semibold px-2.5 py-0.5 rounded-full bg-rose-500/10 border border-rose-500/20" id="header-count-Kdrama">0 Series</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="scrollSlider('kdramaRow', -450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-rose-400 transition cursor-pointer" title="Scroll Left">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="scrollSlider('kdramaRow', 450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-rose-400 transition cursor-pointer" title="Scroll Right">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div id="kdramaRow" class="category-slider-row flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth snap-x"></div>
+      </section>
+
+      <!-- ANIME -->
+      <section id="section-Anime" class="category-row-section transition-all duration-300">
+        <div class="flex items-center justify-between mb-3.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2 h-6 bg-brand-cyan rounded-full shadow-neon-cyan"></div>
+            <h2 class="text-lg md:text-xl font-black tracking-wide text-white">Top Anime</h2>
+            <span class="text-xs text-brand-cyan font-semibold px-2.5 py-0.5 rounded-full bg-brand-cyan/10 border border-brand-cyan/20" id="header-count-Anime">0 Series</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="scrollSlider('animeRow', -450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-brand-cyan transition cursor-pointer" title="Scroll Left">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="scrollSlider('animeRow', 450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-brand-cyan transition cursor-pointer" title="Scroll Right">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div id="animeRow" class="category-slider-row flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth snap-x"></div>
+      </section>
+
+      <!-- CHINESE DRAMAS -->
+      <section id="section-ChineseDrama" class="category-row-section transition-all duration-300">
+        <div class="flex items-center justify-between mb-3.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2 h-6 bg-amber-500 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.5)]"></div>
+            <h2 class="text-lg md:text-xl font-black tracking-wide text-white">Chinese Dramas</h2>
+            <span class="text-xs text-amber-400 font-semibold px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20" id="header-count-ChineseDrama">0 Series</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="scrollSlider('cdramaRow', -450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-amber-400 transition cursor-pointer" title="Scroll Left">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="scrollSlider('cdramaRow', 450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-amber-400 transition cursor-pointer" title="Scroll Right">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div id="cdramaRow" class="category-slider-row flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth snap-x"></div>
+      </section>
+
+      <!-- MOVIES -->
+      <section id="section-Movie" class="category-row-section transition-all duration-300">
+        <div class="flex items-center justify-between mb-3.5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2 h-6 bg-purple-500 rounded-full shadow-[0_0_15px_rgba(168,85,247,0.5)]"></div>
+            <h2 class="text-lg md:text-xl font-black tracking-wide text-white">Movies</h2>
+            <span class="text-xs text-purple-400 font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20" id="header-count-Movie">0 Series</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="scrollSlider('moviesRow', -450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-purple-400 transition cursor-pointer" title="Scroll Left">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="scrollSlider('moviesRow', 450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-purple-400 transition cursor-pointer" title="Scroll Right">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div id="moviesRow" class="category-slider-row flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth snap-x"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- 2. DEDICATED FULL-PAGE CATEGORY SLIDE VIEW -->
+  <!-- ======================================================== -->
+  <section id="dedicatedCategoryView" class="hidden min-h-screen pt-32 pb-28 px-4 md:px-12 max-w-7xl mx-auto space-y-8 transition-opacity duration-300">
+    <div class="p-6 md:p-10 rounded-3xl bg-gradient-to-r from-white/[0.05] via-white/[0.02] to-transparent border border-white/10 relative overflow-hidden">
+      <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <button onclick="filterCategoryView('All')" class="inline-flex items-center gap-2 text-xs font-bold text-brand-cyan hover:underline mb-3 cursor-pointer">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to All Categories
+          </button>
+          <div class="flex items-center gap-3.5">
+            <div id="categoryHeaderIcon" class="w-12 h-12 rounded-2xl bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan flex items-center justify-center shadow-neon-cyan">
+              <i data-lucide="zap" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h1 id="categoryHeaderTitle" class="text-2xl sm:text-4xl font-black text-white tracking-tight">Anime Universe</h1>
+              <p id="categoryHeaderSubtitle" class="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">Streaming top-tier high bitrate series in Dolby Atmos with ambient glow.</p>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="categorySeriesCountBadge" class="px-4 py-2 rounded-2xl bg-white/10 border border-white/15 text-xs font-black text-white">
+            0 Series
+          </span>
+        </div>
+      </div>
+    </div>
+    <div id="categoryShowsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6"></div>
+  </section>
+
+  <!-- ======================================================== -->
+  <!-- 3. YOUTUBE-STYLE SHOW DETAILS & PLAYER PAGE -->
+  <!-- ======================================================== -->
+  <section id="showPlayerPage" class="hidden min-h-screen pt-28 pb-28 px-4 md:px-12 max-w-6xl mx-auto space-y-8 transition-opacity duration-300">
+    <div class="flex items-center justify-between">
+      <button onclick="closeShowPlayerPage()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition cursor-pointer">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to Browse
+      </button>
+      <div class="text-xs text-slate-400 flex items-center gap-1.5">
+        <span class="cursor-pointer hover:text-brand-cyan" onclick="closeShowPlayerPage()">Home</span>
+        <span>/</span>
+        <span id="ytBreadcrumbCategory" class="text-slate-300">Anime</span>
+        <span>/</span>
+        <span id="ytBreadcrumbTitle" class="text-brand-cyan font-bold truncate max-w-[200px]">Title</span>
+      </div>
+    </div>
+
+    <!-- The 16:9 Video Player -->
+    <div class="space-y-4">
+      <div id="ytPlayerStage" onclick="handleYtPlayerTap(event)" class="relative w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden bg-black shadow-2xl border border-white/10 yt-player-glow group select-none cursor-pointer">
+        <video id="ytVideo" class="w-full h-full object-contain" playsinline preload="metadata">
+          <track id="ytSubtitleTrack" kind="subtitles" srclang="en" label="English CC" default>
+        </video>
+        
+        <!-- Double-Tap Indicators -->
+        <div id="ytSkipLeftIndicator" class="skip-indicator-overlay skip-left">
+          <div class="skip-indicator-pill">
+            <i data-lucide="rotate-ccw" class="w-5 h-5 text-brand-cyan"></i>
+            <span id="ytSkipLeftText">-10s</span>
+          </div>
+        </div>
+        <div id="ytSkipRightIndicator" class="skip-indicator-overlay skip-right">
+          <div class="skip-indicator-pill">
+            <i data-lucide="rotate-cw" class="w-5 h-5 text-brand-cyan"></i>
+            <span id="ytSkipRightText">+10s</span>
+          </div>
+        </div>
+
+        <!-- Video Player Overlay Controls -->
+        <div id="ytControlsOverlay" class="absolute inset-0 flex flex-col justify-between p-4 md:p-6 bg-gradient-to-t from-black/95 via-transparent to-black/80 opacity-100 transition-opacity duration-300">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span id="ytBadgeQuality" class="px-2.5 py-0.5 rounded-full bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan text-[10px] font-black uppercase">
+                1080P MASTER
+              </span>
+              <span id="ytBadgeAudio" class="px-2.5 py-0.5 rounded-full bg-white/10 text-slate-300 text-[10px] font-bold">
+                DOLBY ATMOS 5.1
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="toggleYtAmbient()" id="ytAmbientBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-brand-cyan transition cursor-pointer" title="Toggle Ambient Glow">
+                <i data-lucide="sun" class="w-4 h-4"></i>
+              </button>
+              <button onclick="toggleYtFullscreen()" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Fullscreen Mode">
+                <i data-lucide="maximize" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex items-center gap-3">
+              <span id="ytTimeDisplay" class="text-xs font-mono text-slate-300 w-24">00:00 / 00:00</span>
+              <div id="ytScrubContainer" onclick="seekYtVideo(event)" class="relative flex-1 h-3 flex items-center cursor-pointer group/bar">
+                <div class="w-full h-1.5 bg-white/20 rounded-full overflow-hidden relative">
+                  <div id="ytBufferedBar" class="absolute top-0 left-0 bottom-0 bg-white/30 w-0 transition-all"></div>
+                  <div id="ytProgressBar" class="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-brand-cyan to-indigo-500 w-0 shadow-neon-cyan"></div>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2 sm:gap-3">
+                <button onclick="toggleYtPlay()" class="p-2.5 rounded-xl bg-brand-cyan text-black hover:bg-cyan-300 shadow-neon-cyan transition cursor-pointer">
+                  <i data-lucide="play" id="ytPlayIcon" class="w-4 h-4 fill-black"></i>
+                </button>
+                <button onclick="skipYtTime(-10)" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Rewind 10s">
+                  <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+                <button onclick="skipYtTime(10)" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Fast-forward 10s">
+                  <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                </button>
+                <div class="hidden sm:flex items-center gap-2 ml-2">
+                  <button onclick="toggleYtMute()" class="text-slate-300 hover:text-white cursor-pointer">
+                    <i data-lucide="volume-2" id="ytVolumeIcon" class="w-4 h-4"></i>
+                  </button>
+                  <input type="range" id="ytVolumeSlider" min="0" max="1" step="0.05" value="1" oninput="changeYtVolume(this.value)" class="w-16 sm:w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer">
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="toggleYtFullscreen()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-slate-200 flex items-center gap-1.5 transition cursor-pointer">
+                  <i data-lucide="expand" class="w-4 h-4 text-brand-cyan"></i>
+                  <span class="hidden sm:inline">Fullscreen</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metadata & Episodes -->
+    <div class="space-y-6">
+      <div class="p-5 md:p-6 glass-card rounded-3xl border border-white/10 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="space-y-1.5">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span id="ytMetaCategory" class="px-2.5 py-0.5 rounded-full bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan text-xs font-black uppercase">
+                Anime
+              </span>
+              <span id="ytMetaSeason" class="px-2.5 py-0.5 rounded-full bg-white/10 text-slate-300 text-xs font-bold">
+                Season 1
+              </span>
+              <span id="ytMetaRating" class="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold flex items-center gap-1">
+                ★ 9.8
+              </span>
+            </div>
+            <h1 id="ytShowTitle" class="text-2xl md:text-3xl font-black text-white">
+              Series Title
+            </h1>
+            <p id="ytCurrentEpisodeTitle" class="text-sm font-semibold text-brand-cyan">
+              Episode 1
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="text-right">
+              <div id="ytShowViews" class="text-sm font-mono font-black text-amber-400 flex items-center gap-1 justify-end">
+                <i data-lucide="flame" class="w-4 h-4 text-amber-400"></i> 482,190 Views
+              </div>
+              <div class="text-[10px] text-slate-400">Real-Time Series Views</div>
+            </div>
+          </div>
+        </div>
+        <p id="ytShowDesc" class="text-xs md:text-sm text-slate-300 leading-relaxed max-w-4xl">
+          Show synopsis and episode description.
+        </p>
+      </div>
+
+      <!-- HORIZONTAL EPISODES ROW -->
+      <div class="space-y-3.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2 h-6 bg-brand-cyan rounded-full shadow-neon-cyan"></div>
+            <h3 class="text-base md:text-lg font-black uppercase tracking-wider text-white">Episodes</h3>
+            <span id="ytEpisodeCountBadge" class="text-xs text-brand-cyan font-mono px-2.5 py-0.5 rounded-full bg-brand-cyan/10 border border-brand-cyan/20">
+              0 Episodes
+            </span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="scrollSlider('ytEpisodesRow', -360)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-brand-cyan transition cursor-pointer" title="Scroll Left">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="scrollSlider('ytEpisodesRow', 360)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-brand-cyan transition cursor-pointer" title="Scroll Right">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div id="ytEpisodesRow" class="category-slider-row flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth snap-x"></div>
+      </div>
+
+      <!-- SUGGESTED FOR YOU -->
+      <div class="space-y-3.5 pt-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-2 h-6 bg-purple-500 rounded-full shadow-[0_0_15px_rgba(168,85,247,0.5)]"></div>
+            <h3 class="text-base md:text-lg font-black uppercase tracking-wider text-white">Suggested for You</h3>
+            <span class="text-xs text-purple-400 font-semibold">Other Top Series</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="scrollSlider('ytSuggestedRow', -450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-purple-400 transition cursor-pointer" title="Scroll Left">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <button onclick="scrollSlider('ytSuggestedRow', 450)" class="p-2 rounded-xl bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 hover:text-purple-400 transition cursor-pointer" title="Scroll Right">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+        <div id="ytSuggestedRow" class="category-slider-row flex gap-4 overflow-x-auto pb-4 no-scrollbar scroll-smooth snap-x"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================================== -->
+  <!-- FULLSCREEN AMBIENT VIDEO PLAYER MODAL -->
+  <!-- ======================================================== -->
+  <div id="playerModal" class="hidden fixed inset-0 z-50 bg-black/95 flex flex-col justify-between select-none">
+    <button id="smallUnlockBtn" onclick="unlockScreen(event)" class="hidden absolute top-6 left-6 z-50 px-3.5 py-2 rounded-full bg-black/65 hover:bg-black/90 backdrop-blur-md border border-brand-cyan/40 text-brand-cyan shadow-neon-cyan flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none cursor-pointer" title="Unlock Controls">
+      <i data-lucide="lock" class="w-4 h-4"></i>
+      <span class="text-xs font-bold text-white tracking-wide">Unlock</span>
+    </button>
+    <div id="playerTopBar" class="relative z-40 p-4 md:p-6 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent">
+      <div class="flex items-center gap-4">
+        <button onclick="closePlayer()" class="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white backdrop-blur transition cursor-pointer">
+          <i data-lucide="arrow-left" class="w-5 h-5"></i>
+        </button>
+        <div>
+          <h2 id="playerTitle" class="text-sm md:text-lg font-bold text-white tracking-wide truncate max-w-md">Playing Media</h2>
+          <div class="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+            <span class="text-emerald-400 font-semibold flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Ultra-Low Latency
+            </span>
+            <span id="playerResBadge" class="bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded text-[10px] font-bold">4K HDR</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 md:gap-3">
+        <button onclick="toggleAmbientLighting()" id="ambientToggleBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-brand-cyan/30 text-brand-cyan text-xs font-semibold backdrop-blur transition cursor-pointer">
+          <i data-lucide="sun" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Ambient Glow: ON</span>
+        </button>
+        <button onclick="toggleLockScreen()" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition cursor-pointer" title="Lock Screen">
+          <i data-lucide="lock" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+    <div id="playerStageContainer" onclick="handlePlayerScreenTap(event)" class="relative flex-1 flex items-center justify-center overflow-hidden px-2 md:px-8 cursor-pointer">
+      <div id="playerStage" class="relative w-full max-w-6xl aspect-video rounded-3xl overflow-hidden ambient-glow-box bg-black shadow-2xl">
+        <video id="mainVideo" class="w-full h-full object-contain" playsinline preload="metadata">
+          <track id="mainSubtitleTrack" kind="subtitles" srclang="en" label="English CC" default>
+        </video>
+        <div id="playerSkipLeftIndicator" class="skip-indicator-overlay skip-left">
+          <div class="skip-indicator-pill">
+            <i data-lucide="rotate-ccw" class="w-6 h-6 text-brand-cyan"></i>
+            <span id="playerSkipLeftText">-10s</span>
+          </div>
+        </div>
+        <div id="playerSkipRightIndicator" class="skip-indicator-overlay skip-right">
+          <div class="skip-indicator-pill">
+            <i data-lucide="rotate-cw" class="w-6 h-6 text-brand-cyan"></i>
+            <span id="playerSkipRightText">+10s</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="playerBottomBar" class="relative z-40 p-4 md:p-6 bg-gradient-to-t from-black/95 via-black/80 to-transparent space-y-3">
+      <div class="flex items-center gap-3">
+        <span id="timeDisplay" class="text-xs font-mono text-slate-300 w-24">00:00 / 00:00</span>
+        <div id="scrubContainer" onclick="seekVideo(event)" class="relative flex-1 h-3 flex items-center cursor-pointer group">
+          <div class="w-full h-1.5 bg-white/20 rounded-full overflow-hidden relative">
+            <div id="bufferedBar" class="absolute top-0 left-0 bottom-0 bg-white/30 w-0 transition-all"></div>
+            <div id="progressBar" class="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-brand-cyan to-brand-purple w-0 shadow-neon-cyan"></div>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2 md:gap-4">
+          <button onclick="togglePlay()" class="p-3 rounded-2xl bg-brand-cyan text-black hover:bg-cyan-300 shadow-neon-cyan transition cursor-pointer">
+            <i data-lucide="play" id="playIcon" class="w-5 h-5 fill-black"></i>
+          </button>
+          <button onclick="skipTime(-10)" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Rewind 10s">
+            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+          </button>
+          <button onclick="skipTime(10)" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Fast-forward 10s">
+            <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+          </button>
+          <div class="hidden sm:flex items-center gap-2 ml-2">
+            <button onclick="toggleMute()" class="text-slate-300 hover:text-white cursor-pointer">
+              <i data-lucide="volume-2" id="volumeIcon" class="w-4 h-4"></i>
+            </button>
+            <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="1" oninput="changeVolume(this.value)" class="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer">
+          </div>
+        </div>
+        <div class="flex items-center gap-2 md:gap-3">
+          <button onclick="toggleAudioSubModal()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-slate-200 flex items-center gap-1.5 transition cursor-pointer">
+            <i data-lucide="subtitles" class="w-4 h-4 text-brand-cyan"></i>
+            <span class="hidden md:inline">Audio & CC</span>
+          </button>
+          <button onclick="toggleQualityModal()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-brand-cyan font-bold flex items-center gap-1.5 transition cursor-pointer">
+            <i data-lucide="sliders" class="w-4 h-4"></i>
+            <span id="currentQualityBadge">4K Master</span>
+          </button>
+          <button onclick="togglePiP()" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition cursor-pointer" title="Picture in Picture">
+            <i data-lucide="picture-in-picture" class="w-4 h-4"></i>
+          </button>
+          <button id="fullscreenBtn" onclick="toggleFullscreen()" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition cursor-pointer" title="Fullscreen">
+            <i data-lucide="maximize" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Subtitle Modal -->
+    <div id="audioSubModal" class="hidden absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="w-full max-w-md glass-card rounded-3xl p-6 border border-white/10 shadow-2xl space-y-5">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <h3 class="text-sm font-black text-white flex items-center gap-2">
+            <i data-lucide="subtitles" class="w-4 h-4 text-brand-cyan"></i> Subtitles & Audio Stream
+          </h3>
+          <button onclick="toggleAudioSubModal()" class="text-slate-400 hover:text-white cursor-pointer"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-2">Subtitles (Multi-Language CC)</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="setSubtitle('English CC')" class="py-2 px-3 rounded-xl bg-brand-cyan/20 border border-brand-cyan text-brand-cyan text-xs font-bold text-left cursor-pointer">English CC (Active)</button>
+            <button onclick="setSubtitle('Japanese')" class="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">Japanese</button>
+            <button onclick="setSubtitle('Korean')" class="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">Korean</button>
+            <button onclick="setSubtitle('Hindi')" class="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">Hindi</button>
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-2">Audio Master Track</label>
+          <div class="grid grid-cols-1 gap-2">
+            <button onclick="setAudioTrack('Original (Dolby Atmos 5.1)')" class="py-2.5 px-3 rounded-xl bg-brand-purple/20 border border-brand-purple text-purple-300 text-xs font-bold text-left flex justify-between cursor-pointer">
+              <span>Original (Dolby Atmos 5.1)</span> <span class="text-[10px] bg-purple-500/40 px-1.5 rounded">STUDIO</span>
+            </button>
+            <button onclick="setAudioTrack('English Studio Dub')" class="py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">English Studio Dub</button>
+            <button onclick="setAudioTrack('Korean Original 5.1')" class="py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">Korean Original</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Quality Modal -->
+    <div id="qualityModal" class="hidden absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="w-full max-w-sm glass-card rounded-3xl p-6 border border-white/10 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-white/10 pb-3">
+          <h3 class="text-sm font-black text-white flex items-center gap-2">
+            <i data-lucide="sliders" class="w-4 h-4 text-brand-cyan"></i> Video Resolution
+          </h3>
+          <button onclick="toggleQualityModal()" class="text-slate-400 hover:text-white cursor-pointer"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+        <div class="space-y-2">
+          <button onclick="selectQuality('4K Master HDR')" class="w-full py-2.5 px-3 rounded-xl bg-brand-cyan/20 border border-brand-cyan text-brand-cyan text-xs font-bold flex justify-between items-center cursor-pointer">
+            <span>4K Ultra HD (HEVC 60FPS)</span>
+            <span class="text-[10px] bg-brand-cyan text-black px-1.5 py-0.5 rounded font-black">HDR</span>
+          </button>
+          <button onclick="selectQuality('1080p FHD')" class="w-full py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium flex justify-between items-center cursor-pointer">
+            <span>1080p Full HD</span>
+            <span class="text-[10px] text-slate-400">Crisp</span>
+          </button>
+          <button onclick="selectQuality('720p HD')" class="w-full py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium flex justify-between items-center cursor-pointer">
+            <span>720p HD</span>
+            <span class="text-[10px] text-slate-400">Data Saver</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- "ME" PROFILE MODAL -->
+  <!-- ======================================================== -->
+  <div id="meModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-center justify-center p-4">
+    <div class="w-full max-w-lg glass-card rounded-3xl p-6 border border-white/15 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+      <!-- TOP MODAL HEADER: Switches between Authenticated User Card and Guest Card -->
+      <div class="flex items-center justify-between border-b border-white/10 pb-4">
+        <!-- 1. AUTHENTICATED USER CARD (Hidden by default when logged out) -->
+        <div id="meUserProfileCard" class="hidden items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-cyan to-brand-purple flex items-center justify-center p-0.5 shadow-neon-cyan flex-shrink-0">
+            <div class="w-full h-full bg-brand-dark rounded-[14px] flex items-center justify-center font-black text-brand-cyan text-lg" id="meAvatarInitials">
+              U
+            </div>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-black text-white truncate" id="meDisplayName">User</h3>
+              <span id="meRoleBadge" class="text-[9px] font-black px-2 py-0.5 rounded-full bg-white/20 text-white uppercase tracking-wider">
+                VIEWER
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 truncate max-w-[260px]" id="meEmailDisplay"></p>
+          </div>
+        </div>
+
+        <!-- 2. GUEST CARD (Displayed by default when logged out) -->
+        <div id="meGuestCard" class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-400 flex-shrink-0">
+            <i data-lucide="user" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-black text-white">Welcome Guest</h3>
+              <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-300 uppercase tracking-wider">
+                NOT SIGNED IN
+              </span>
+            </div>
+            <p class="text-xs text-slate-400">Login with Google to unlock full access</p>
+          </div>
+        </div>
+
+        <button onclick="closeMeModal()" class="p-2 text-slate-400 hover:text-white rounded-xl bg-white/5 hover:bg-white/10 transition cursor-pointer" title="Close Profile">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Secret Admin Action: Creator Studio (Hidden by default; unhidden ONLY for vimleshkumar901559@gmail.com) -->
+      <div id="meSecretAdminSection" class="hidden" style="display: none;"></div>
+
+      <!-- Watch History (Hidden by default for Guest; shown only when authenticated) -->
+      <div id="meWatchHistorySection" class="hidden space-y-3 border-t border-white/10 pt-4" style="display: none;">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="history" class="w-4 h-4 text-brand-cyan"></i>
+            <h4 class="text-xs font-black uppercase tracking-wider text-white">Watch History</h4>
+          </div>
+          <button onclick="clearWatchHistory()" class="text-[11px] text-slate-400 hover:text-rose-400 transition cursor-pointer" id="clearWatchHistoryBtn">Clear History</button>
+        </div>
+        <div id="meWatchHistoryList" class="space-y-2 max-h-56 overflow-y-auto pr-1 no-scrollbar"></div>
+      </div>
+
+      <!-- Auth Action: Login Options (Guest) OR Sign Out button (User) -->
+      <div id="meAuthActions" class="space-y-4 border-t border-white/10 pt-4">
+        <!-- 1. GUEST AUTH PANEL (Visible when logged out) -->
+        <div id="meGuestAuthPanel" class="space-y-4">
+          <!-- Prominent Login with Google Button -->
+          <button id="googleSignInBtn" onclick="triggerGoogleSignIn()" class="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-100 text-black font-extrabold text-xs flex items-center justify-center gap-3 transition shadow-lg cursor-pointer">
+            <svg class="w-4 h-4" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            <span>Login with Google</span>
+          </button>
+
+          <!-- OR Divider -->
+          <div class="relative flex py-0.5 items-center">
+            <div class="flex-grow border-t border-white/10"></div>
+            <span class="flex-shrink mx-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase">OR</span>
+            <div class="flex-grow border-t border-white/10"></div>
+          </div>
+
+          <!-- Email & Password Form -->
+          <div class="space-y-2">
+            <div>
+              <label for="authEmailInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1">Email Address</label>
+              <input type="email" id="authEmailInput" placeholder="name@example.com" class="w-full bg-black/40 border border-white/15 focus:border-brand-cyan rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none transition" autocomplete="email" />
+            </div>
+            <div>
+              <label for="authPasswordInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1">Password</label>
+              <input type="password" id="authPasswordInput" placeholder="Enter password (min. 6 characters)" onkeydown="if(event.key==='Enter') handleEmailLogin()" class="w-full bg-black/40 border border-white/15 focus:border-brand-cyan rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none transition" autocomplete="current-password" />
+            </div>
+            <div class="grid grid-cols-2 gap-2 pt-1">
+              <button id="emailLoginBtn" onclick="handleEmailLogin()" class="py-2.5 px-3 rounded-xl bg-brand-cyan hover:bg-cyan-300 text-black font-black text-xs transition shadow-neon-cyan cursor-pointer">
+                Login
+              </button>
+              <button id="emailSignUpBtn" onclick="handleEmailSignUp()" class="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/15 transition cursor-pointer">
+                Create Account
+              </button>
+            </div>
+          </div>
+
+          <!-- Another Divider -->
+          <div class="relative flex py-0.5 items-center">
+            <div class="flex-grow border-t border-white/10"></div>
+            <span class="flex-shrink mx-3 text-[10px] font-bold tracking-wider text-slate-400 uppercase">OR PHONE NUMBER</span>
+            <div class="flex-grow border-t border-white/10"></div>
+          </div>
+
+          <!-- Phone Number Login -->
+          <div class="space-y-2">
+            <label for="authPhoneInput" class="block text-[11px] font-bold uppercase tracking-wider text-slate-300">Phone Number</label>
+            <div class="flex gap-2">
+              <input type="tel" id="authPhoneInput" placeholder="+91 9876543210" onkeydown="if(event.key==='Enter') handleSendOtp()" class="flex-1 min-w-0 bg-black/40 border border-white/15 focus:border-brand-cyan rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none transition" autocomplete="tel" />
+              <button id="sendOtpBtn" onclick="handleSendOtp()" class="py-2.5 px-4 rounded-xl bg-brand-purple/20 hover:bg-brand-purple/30 text-brand-purple font-bold text-xs border border-brand-purple/40 transition whitespace-nowrap cursor-pointer">
+                Send OTP
+              </button>
+            </div>
+
+            <!-- OTP Input and Verify Button (Hidden until OTP is sent) -->
+            <div id="otpInputContainer" class="hidden space-y-2 pt-1" style="display: none;">
+              <label for="authOtpInput" class="block text-[11px] font-bold uppercase tracking-wider text-brand-cyan">Verification Code</label>
+              <div class="flex gap-2">
+                <input type="text" id="authOtpInput" placeholder="6-digit OTP" maxlength="6" onkeydown="if(event.key==='Enter') handleVerifyOtp()" class="flex-1 min-w-0 bg-black/40 border border-brand-cyan/50 focus:border-brand-cyan rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 outline-none transition font-mono tracking-widest text-center" />
+                <button id="verifyOtpBtn" onclick="handleVerifyOtp()" class="py-2.5 px-4 rounded-xl bg-brand-cyan hover:bg-cyan-300 text-black font-black text-xs transition shadow-neon-cyan whitespace-nowrap cursor-pointer">
+                  Verify OTP
+                </button>
+              </div>
+              <p class="text-[10px] text-slate-400">SMS code sent. Enter the code above to verify and log in.</p>
+            </div>
+
+            <!-- Recaptcha Container for Firebase Phone Auth -->
+            <div id="recaptcha-container" class="mt-1"></div>
+          </div>
+        </div>
+
+        <!-- 2. SIGNED-IN USER PANEL (Visible when authenticated, hidden when guest) -->
+        <div id="meUserAuthPanel" class="hidden" style="display: none;">
+          <button id="signOutBtn" onclick="handleSignOut()" class="w-full py-3 px-4 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer">
+            <i data-lucide="log-out" class="w-4 h-4"></i> Sign Out
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DOWNLOADS HUB MODAL -->
+  <div id="downloadsModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-4">
+    <div class="w-full max-w-xl glass-card rounded-3xl p-6 border border-white/15 shadow-2xl space-y-6">
+      <div class="flex items-center justify-between border-b border-white/10 pb-4">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2.5 bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan rounded-2xl">
+            <i data-lucide="hard-drive" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-black text-white">Smart Downloads & Offline Hub</h3>
+            <p class="text-xs text-slate-400">Play local media or download high-bitrate streams for offline</p>
+          </div>
+        </div>
+        <button onclick="closeDownloadsModal()" class="text-slate-400 hover:text-white p-2 cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="bg-white/5 p-4 rounded-2xl border border-white/5 space-y-2">
+        <div class="flex justify-between text-xs">
+          <span class="text-slate-300 font-semibold">Device Storage Allocation</span>
+          <span class="text-brand-cyan font-mono font-bold">128.4 GB Free of 256 GB</span>
+        </div>
+        <div class="w-full h-2.5 bg-white/10 rounded-full overflow-hidden flex">
+          <div class="bg-brand-cyan h-full w-[25%] shadow-neon-cyan"></div>
+          <div class="bg-brand-purple h-full w-[12%]"></div>
+          <div class="bg-white/20 h-full w-[15%]"></div>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Saved Files</h4>
+        <div class="p-6 text-center text-xs text-slate-400 bg-white/5 rounded-2xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-2">
+          <i data-lucide="download-cloud" class="w-6 h-6 text-slate-500"></i>
+          <p class="font-bold text-slate-300">No Offline Files Downloaded Yet</p>
+          <p class="text-[11px] text-slate-500">You can scan your local device below to play offline videos with the ambient player.</p>
+        </div>
+      </div>
+      <div class="border-t border-white/10 pt-4">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <h4 class="text-xs font-bold text-white">Local Device File Scanner</h4>
+            <p class="text-[11px] text-slate-400">Detect and play local .mp4 / .mkv files in ambient mode</p>
+          </div>
+          <button onclick="simulateLocalScan()" id="scanBtn" class="px-3 py-1.5 bg-white/10 hover:bg-white/20 border border-brand-cyan/40 text-brand-cyan rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer">
+            <i data-lucide="radar" class="w-4 h-4"></i> Scan Storage
+          </button>
+        </div>
+        <div id="localScanResults" class="hidden space-y-2 max-h-36 overflow-y-auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SEARCH MODAL -->
+  <div id="searchModal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-2xl flex items-start justify-center pt-16 px-4">
+    <div class="w-full max-w-2xl glass-card rounded-3xl p-6 border border-white/15 shadow-2xl space-y-5">
+      <div class="relative flex items-center">
+        <i data-lucide="search" class="absolute left-4 w-5 h-5 text-brand-cyan"></i>
+        <input type="text" id="searchInput" oninput="handleSearchQuery(this.value)" placeholder="Search Kdrama, Anime, Chinese Drama, or Movies..." class="w-full bg-white/5 border border-white/15 rounded-2xl py-3.5 pl-12 pr-12 text-sm text-white focus:outline-none focus:border-brand-cyan focus:ring-1 focus:ring-brand-cyan">
+        <button onclick="closeSearchModal()" class="absolute right-4 text-slate-400 hover:text-white cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div>
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">Explore by category:</p>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="setSearchTerm('Kdrama')" class="px-3 py-1 rounded-full bg-rose-500/10 border border-rose-500/40 text-rose-300 text-xs font-semibold hover:bg-rose-500 hover:text-white transition cursor-pointer">#Kdrama</button>
+          <button onclick="setSearchTerm('Anime')" class="px-3 py-1 rounded-full bg-brand-cyan/10 border border-brand-cyan/40 text-brand-cyan text-xs font-semibold hover:bg-brand-cyan hover:text-black transition cursor-pointer">#Anime</button>
+          <button onclick="setSearchTerm('Chinese Drama')" class="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs font-semibold hover:bg-amber-500 hover:text-black transition cursor-pointer">#ChineseDrama</button>
+          <button onclick="setSearchTerm('Movie')" class="px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/40 text-purple-300 text-xs font-semibold hover:bg-purple-500 hover:text-white transition cursor-pointer">#Movie</button>
+        </div>
+      </div>
+      <div id="searchResults" class="space-y-2 max-h-80 overflow-y-auto pr-1"></div>
+    </div>
+  </div>
+
+  <!-- CREATOR STUDIO ADMIN MODAL -->
+  <div id="creatorStudioModal" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-2xl flex items-center justify-center p-4">
+    <div class="w-full max-w-4xl glass-card rounded-3xl p-6 md:p-8 border border-brand-cyan/40 shadow-neon-cyan space-y-6 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between border-b border-white/10 pb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-2xl bg-brand-cyan/20 border border-brand-cyan text-brand-cyan flex items-center justify-center shadow-neon-cyan">
+            <i data-lucide="clapperboard" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-lg font-black text-white">Creator Studio (Admin Control)</h3>
+              <span class="text-[10px] bg-brand-cyan text-black font-extrabold px-2 py-0.5 rounded-full">FIRESTORE DIRECT</span>
+            </div>
+            <p class="text-xs text-slate-400">Logged in as: <span class="text-brand-cyan font-mono" id="adminStudioEmailDisplay">verseshow94@gmail.com</span></p>
+          </div>
+        </div>
+        <button onclick="closeCreatorStudio()" class="p-2 rounded-xl bg-white/5 text-slate-400 hover:text-white cursor-pointer">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="adminUploadForm" onsubmit="handleBatchUpload(event)" class="space-y-4 bg-white/5 p-5 rounded-2xl border border-white/10">
+        <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+          <i data-lucide="upload-cloud" class="w-4 h-4 text-brand-cyan"></i> Batch-Upload Episode or Movie to Firestore
+        </h4>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Series / Title Name *</label>
+            <input type="text" id="adminTitle" required placeholder="e.g., Solo Leveling: Arise" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-cyan focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Category (Strict Mapping) *</label>
+            <select id="admin-category" onchange="handleCategoryChange()" required class="w-full bg-slate-900 border border-brand-cyan/40 rounded-xl px-3 py-2 text-xs text-brand-cyan font-bold focus:border-brand-cyan focus:outline-none cursor-pointer">
+              <option value="Kdrama">Kdrama</option>
+              <option value="Anime" selected>Anime</option>
+              <option value="Chinese Drama">Chinese Drama</option>
+              <option value="Movie">Movie</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4" id="adminSeasonEpisodeRow">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Season</label>
+            <input type="number" id="adminSeason" value="1" min="1" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-cyan focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Episode #</label>
+            <input type="number" id="adminEpisode" value="1" min="1" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-cyan focus:outline-none">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Master Video Stream URL (.mp4 / .m3u8 HLS) *</label>
+            <input type="url" id="adminVideoUrl" required placeholder="https://vjs.zencdn.net/v/oceans.mp4" value="https://vjs.zencdn.net/v/oceans.mp4" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-cyan focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Thumbnail / Poster Image URL</label>
+            <input type="url" id="adminThumbUrl" placeholder="https://images.unsplash.com/photo-..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-cyan focus:outline-none">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Audio Tracks (Comma separated)</label>
+            <input type="text" id="adminAudioTracks" value="Dolby Atmos 5.1, Studio Master" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-cyan focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Subtitles (Comma separated)</label>
+            <input type="text" id="adminSubtitles" value="English CC, Spanish, Japanese, Hindi" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-cyan focus:outline-none">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Synopsis</label>
+          <textarea id="adminSynopsis" rows="2" placeholder="Brief synopsis of this title..." class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-brand-cyan focus:outline-none"></textarea>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <div class="flex items-center gap-2 text-xs text-emerald-400">
+            <i data-lucide="shield-check" class="w-4 h-4"></i>
+            <span>Verified Admin: vimleshkumar901559@gmail.com</span>
+          </div>
+          <div class="flex items-center gap-2.5">
+            <button type="button" onclick="addToBatchQueue()" class="px-4 py-2.5 rounded-xl border border-brand-cyan/60 hover:bg-brand-cyan/10 text-brand-cyan font-bold text-xs transition flex items-center gap-2 cursor-pointer">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i> + Add to Batch Queue
+            </button>
+            <button type="button" onclick="uploadAllBatchToFirestore()" id="btnUploadAllBatch" class="px-6 py-2.5 bg-brand-cyan text-black font-extrabold text-xs rounded-xl shadow-neon-cyan hover:bg-cyan-300 transition flex items-center gap-2 cursor-pointer">
+              <i data-lucide="rocket" class="w-4 h-4"></i> <span>Upload ALL to Firestore</span>
+              <span id="batchCountBadge" class="bg-black/80 text-brand-cyan text-[10px] px-2 py-0.5 rounded-full font-mono font-bold">0</span>
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="layers" class="w-4 h-4 text-brand-cyan"></i>
+            <h4 class="text-xs font-black uppercase tracking-wider text-slate-200">STAGED BATCH QUEUE</h4>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="batchQueueCounter" class="text-xs text-brand-cyan font-mono font-bold">0 Items</span>
+            <button onclick="clearBatchQueue()" class="text-[11px] text-slate-400 hover:text-rose-400 transition cursor-pointer">Clear Queue</button>
+          </div>
+        </div>
+        <div id="stagedBatchQueueList" class="space-y-2 max-h-52 overflow-y-auto"></div>
+      </div>
+
+      <div class="space-y-3 border-t border-white/10 pt-5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="history" class="w-4 h-4 text-emerald-400"></i>
+            <h4 class="text-xs font-black uppercase tracking-wider text-white">PUBLISHED CONTENT HISTORY (<code class="text-brand-cyan font-mono text-[11px]">showverse_episodes</code>)</h4>
+          </div>
+          <span id="publishedContentCounter" class="text-xs text-emerald-400 font-mono font-bold">Live Synced</span>
+        </div>
+        <div id="publishedContentList" class="space-y-2 max-h-64 overflow-y-auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOBILE BOTTOM APP DOCK -->
+  <div class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-brand-dark/95 backdrop-blur-xl border-t border-white/10 px-6 py-2.5 flex items-center justify-between">
+    <button onclick="filterCategoryView('All')" class="flex flex-col items-center gap-1 text-brand-cyan text-[10px] font-semibold cursor-pointer">
+      <i data-lucide="compass" class="w-5 h-5"></i>
+      <span>Explore</span>
+    </button>
+    <button onclick="openSearchModal()" class="flex flex-col items-center gap-1 text-slate-400 hover:text-white text-[10px] font-semibold cursor-pointer">
+      <i data-lucide="search" class="w-5 h-5"></i>
+      <span>Search</span>
+    </button>
+    <button onclick="openDownloadsModal()" class="flex flex-col items-center gap-1 text-slate-400 hover:text-white text-[10px] font-semibold cursor-pointer">
+      <i data-lucide="folder-down" class="w-5 h-5"></i>
+      <span>Offline</span>
+    </button>
+    <button onclick="openMeModal()" id="bottomNavMe" class="flex flex-col items-center gap-1 text-slate-400 hover:text-brand-cyan text-[10px] font-semibold cursor-pointer">
+      <i data-lucide="user" class="w-5 h-5"></i>
+      <span>Me</span>
+    </button>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast" class="fixed bottom-20 md:bottom-8 right-6 z-50 transform translate-y-24 opacity-0 transition-all duration-300">
+    <div class="glass-card px-4 py-3 rounded-2xl border border-brand-cyan/40 shadow-neon-cyan flex items-center gap-3">
+      <i data-lucide="sparkles" class="w-4 h-4 text-brand-cyan"></i>
+      <span id="toastMsg" class="text-xs font-bold text-white">Action Completed</span>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script type="module" src="/firebase.js"></script>
+  <script type="module" src="/auth.js"></script>
+  <script type="module" src="/admin.js"></script>
+  <script type="module" src="/player.js"></script>
+  <script type="module" src="/app.js"></script>
+  <script type="module" src="/init.js"></script>
+</body>
+</html>
