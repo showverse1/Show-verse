@@ -367,6 +367,7 @@ export function openCreatorStudio() {
   if (typeof window.handleCategoryChange === 'function') window.handleCategoryChange();
   if (typeof window.renderStagedBatchQueue === 'function') window.renderStagedBatchQueue();
   if (typeof window.initPublishedContentManager === 'function') window.initPublishedContentManager();
+  if (typeof window.fetchAndDisplayManageContent === 'function') window.fetchAndDisplayManageContent();
 }
 
 export function closeCreatorStudio() {
