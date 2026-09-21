@@ -302,7 +302,12 @@ export function playMedia(title, url, resumeTime = 0, meta = {}) {
   }
 
   if (typeof window.loadVideoWithPlyr === 'function') {
+    if (mainVid) {
+      mainVid.removeAttribute('poster');
+      mainVid.poster = '';
+    }
     window.loadVideoWithPlyr(mainVid, targetUrl, seekTo, {
+      loadingText: 'Buffering Video...',
       onEnded: () => {
         if (window.showToast) window.showToast("Playback completed");
       }

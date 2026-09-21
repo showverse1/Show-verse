@@ -28,7 +28,24 @@
 #ytPlayerStage, #playerStage {
   position: relative;
   overflow: hidden;
-  background-color: #000;
+  background-color: #000 !important;
+}
+
+#ytPlayerStage video,
+#playerStage video,
+.plyr video,
+.plyr__video-wrapper,
+.plyr {
+  background-color: #000 !important;
+}
+
+/* Completely suppress any video poster image */
+.plyr__poster,
+video::poster {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  background-image: none !important;
 }
 
 /* Audio Equalizer Bars for Active Episode */
@@ -79,4 +96,42 @@
 }
 .plyr__menu__container .plyr__control[role=menuitemradio][aria-checked=true]::before {
   background: #00F0FF !important;
+}
+
+/* Video Buffering and Loading Spinner Overlay */
+.video-spinner-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background-color: #000000 !important;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.22s ease-in-out, visibility 0.22s ease-in-out;
+  pointer-events: none !important;
+}
+
+.video-spinner-overlay * {
+  pointer-events: none !important;
+}
+
+.video-spinner-overlay.is-hidden {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Player Visible Error Overlay */
+.player-error-overlay {
+  transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
+}
+.player-error-overlay.is-hidden {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }

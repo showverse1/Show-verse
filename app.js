@@ -786,8 +786,19 @@ export function openShowPlayerPage(showKeyOrTitle, episodeIndex = 0, resumeTime 
 }
 
 function loadActiveYtEpisode(index, resumeTime = 0) {
-  if (!currentSelectedShow || !currentSelectedShow.episodes[index]) return;
+  console.log(`[ShowVerse] loadActiveYtEpisode called for episode index: ${index}, resumeTime: ${resumeTime}`);
+  if (!currentSelectedShow || !currentSelectedShow.episodes || !currentSelectedShow.episodes[index]) {
+    console.warn(`[ShowVerse] loadActiveYtEpisode: show or episode index ${index} invalid.`, currentSelectedShow);
+    return;
+  }
   const episode = currentSelectedShow.episodes[index];
+  console.log(`[ShowVerse] Loading Episode Data:`, {
+    showTitle: currentSelectedShow.title,
+    episodeNumber: episode.episodeNumber,
+    episodeTitle: episode.episodeTitle,
+    videoUrl: episode.videoUrl
+  });
+
   const video = document.getElementById('main-video') || document.querySelector('#ytPlayerStage video');
   const curEpTitle = document.getElementById('ytCurrentEpisodeTitle');
   const badgeQuality = document.getElementById('ytBadgeQuality');
@@ -815,8 +826,14 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
   }
 
   if (video) {
-    const targetUrl = episode.videoUrl || '';
+    const targetUrl = typeof episode.videoUrl === 'string' ? episode.videoUrl.trim() : '';
+    console.log(`[ShowVerse] Target video URL reaching player: "${targetUrl}"`);
+
     if (!targetUrl) {
+      console.warn("[ShowVerse] Episode video URL is empty!");
+      if (typeof window.showPlayerError === 'function') {
+        window.showPlayerError(video, "Error loading video", "No video stream URL found for this episode.");
+      }
       if (window.showToast) window.showToast("No video stream URL found for this episode.");
       return;
     }
@@ -831,7 +848,11 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
     }
 
     if (typeof window.loadVideoWithPlyr === 'function') {
+      video.removeAttribute('poster');
+      video.poster = '';
       window.loadVideoWithPlyr(video, targetUrl, seekTo, {
+        loadingText: `Loading Episode ${episode.episodeNumber}...`,
+        title: episode.episodeTitle || `Episode ${episode.episodeNumber}`,
         onEnded: () => {
           if (currentSelectedShow && currentSelectedEpisodeIndex < currentSelectedShow.episodes.length - 1) {
             if (window.showToast) window.showToast("Playing next episode...");
@@ -839,7 +860,20 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
           }
         }
       });
+    } else {
+      // Direct fallback
+      console.log(`[ShowVerse] Fallback: updating video.src, video.load(), video.play()`);
+      video.removeAttribute('poster');
+      video.poster = '';
+      video.src = targetUrl;
+      video.load();
+      const p = video.play();
+      if (p !== undefined) {
+        p.catch(err => console.log("[ShowVerse] Autoplay caught:", err));
+      }
     }
+  } else {
+    console.error("[ShowVerse] Video element could not be found in DOM!");
   }
 }
 
@@ -934,8 +968,24 @@ function renderYtSuggestedRow() {
 }
 
 export function switchYtEpisode(index) {
-  if (!currentSelectedShow || !currentSelectedShow.episodes[index]) return;
+  console.log(`[ShowVerse] switchYtEpisode called with index: ${index}`);
+  if (!currentSelectedShow || !currentSelectedShow.episodes || !currentSelectedShow.episodes[index]) {
+    console.warn(`[ShowVerse] switchYtEpisode: Invalid episode index ${index}`, currentSelectedShow);
+    return;
+  }
   currentSelectedEpisodeIndex = index;
+  window.currentSelectedEpisodeIndex = index;
+  
+  const ep = currentSelectedShow.episodes[index];
+  console.log(`[ShowVerse] switchYtEpisode switching to Episode ${ep.episodeNumber}:`, {
+    title: ep.episodeTitle,
+    videoUrl: ep.videoUrl
+  });
+
+  if (typeof window.showVideoSpinner === 'function') {
+    window.showVideoSpinner(null, `Loading Episode ${ep.episodeNumber}...`);
+  }
+
   loadActiveYtEpisode(index);
   renderYtEpisodesRow();
 
@@ -1083,6 +1133,7 @@ if (typeof window !== "undefined") {
   window.openShowPlayerPage = openShowPlayerPage;
   window.closeShowPlayerPage = closeShowPlayerPage;
   window.switchYtEpisode = switchYtEpisode;
+  window.loadActiveYtEpisode = loadActiveYtEpisode;
   window.toggleYtPlay = toggleYtPlay;
   window.handleYtPlayerTap = handleYtPlayerTap;
   window.triggerYtSkipAnimation = triggerYtSkipAnimation;
