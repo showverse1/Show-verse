@@ -817,6 +817,7 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
   if (video) {
     if (window.showYtBufferingSpinner) window.showYtBufferingSpinner();
     if (window.initMainPlayerControlsAutoHide) window.initMainPlayerControlsAutoHide();
+    if (window.attachMainPlayerSeekSkipListeners) window.attachMainPlayerSeekSkipListeners();
     if (window.setupMainPlayerVideoListeners) window.setupMainPlayerVideoListeners(video);
     const targetUrl = episode.videoUrl || '';
     if (!targetUrl) {
@@ -1154,27 +1155,30 @@ export function handleYtPlayerTap(e) {
   }
 }
 
-export function skipMainVideo(seconds) {
+export function skipMainVideo(seconds, e) {
+  if (e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+  }
   const video = document.getElementById('main-video') || document.getElementById('ytVideo');
   if (!video) return;
-  const cur = video.currentTime;
-  if (typeof cur !== 'number' || isNaN(cur)) return;
 
-  const step = Number(seconds) || 10;
-  let target = cur + step;
+  // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
+  if (isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) return;
+  if (isNaN(video.currentTime) || !Number.isFinite(video.currentTime)) {
+    video.currentTime = 0;
+  }
 
-  const dur = video.duration;
-  if (Number.isFinite(dur) && dur > 0) {
-    target = Math.max(0, Math.min(dur, target));
+  // 2. Safe Math for Skip:
+  if (seconds > 0) {
+    // For +10s:
+    video.currentTime = Math.min(video.currentTime + 10, video.duration);
   } else {
-    target = Math.max(0, target);
+    // For -10s:
+    video.currentTime = Math.max(video.currentTime - 10, 0);
   }
 
-  if (Number.isFinite(target) && !isNaN(target)) {
-    video.currentTime = target;
-  }
-
-  triggerYtSkipAnimation(step);
+  triggerYtSkipAnimation(seconds);
   if (typeof window.resetMainPlayerControlsTimer === 'function') {
     window.resetMainPlayerControlsTimer();
   }
@@ -1182,29 +1186,30 @@ export function skipMainVideo(seconds) {
 export const skipYtTime = skipMainVideo;
 
 export function seekMainVideo(e) {
-  if (e && e.stopPropagation) e.stopPropagation();
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
-  const bar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
-  if (!video || !bar) return;
-
-  const duration = video.duration;
-  if (!Number.isFinite(duration) || duration <= 0 || isNaN(duration)) {
-    return;
+  // 1. Stop Event Bubbling
+  if (e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
   }
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
+  const mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
+  if (!video || !mainProgressBar) return;
 
-  const barWidth = bar.offsetWidth;
-  if (!barWidth || barWidth <= 0) return;
+  // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
+  if (isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) return;
+  if (!e || typeof e.clientX !== 'number' || isNaN(e.clientX)) return;
 
-  // Accurately calculate (e.offsetX / mainProgressBar.offsetWidth) * mainVideo.duration
-  let clickX = (e && typeof e.offsetX === 'number' && !isNaN(e.offsetX) && e.currentTarget === bar)
-    ? e.offsetX
-    : ((e && typeof e.clientX === 'number') ? (e.clientX - bar.getBoundingClientRect().left) : 0);
+  // 3. Safe Math for Timeline Scrubbing:
+  const rect = mainProgressBar.getBoundingClientRect();
+  if (!rect.width || isNaN(rect.width) || rect.width <= 0) return;
+  const pos = (e.clientX - rect.left) / rect.width;
+  if (isNaN(pos) || !Number.isFinite(pos)) return;
 
-  clickX = Math.max(0, Math.min(barWidth, clickX));
+  video.currentTime = Math.max(0, Math.min(pos * video.duration, video.duration));
 
-  const newTime = (clickX / barWidth) * duration;
-  if (Number.isFinite(newTime) && !isNaN(newTime)) {
-    video.currentTime = newTime;
+  const fill = document.getElementById('main-progress-fill');
+  if (fill && video.duration > 0) {
+    fill.style.width = `${Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100))}%`;
   }
 
   if (typeof window.resetMainPlayerControlsTimer === 'function') {

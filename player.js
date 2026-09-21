@@ -318,60 +318,148 @@ export function hideYtBufferingSpinner() {
   }
 }
 
-export function skipMainVideo(seconds) {
+export function skipMainVideo(seconds, e) {
+  if (e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+  }
   const mainVideo = getMainVideoElement();
   if (!mainVideo) return;
 
-  const cur = mainVideo.currentTime;
-  if (typeof cur !== 'number' || isNaN(cur)) return;
-
-  const step = Number(seconds) || 10;
-  let targetTime = cur + step;
-
-  const dur = mainVideo.duration;
-  if (Number.isFinite(dur) && dur > 0) {
-    targetTime = Math.max(0, Math.min(dur, targetTime));
-  } else {
-    targetTime = Math.max(0, targetTime);
+  // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
+  if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
+  if (isNaN(mainVideo.currentTime) || !Number.isFinite(mainVideo.currentTime)) {
+    mainVideo.currentTime = 0;
   }
 
-  if (Number.isFinite(targetTime) && !isNaN(targetTime)) {
-    mainVideo.currentTime = targetTime;
+  // 2. Safe Math for Skip:
+  if (seconds > 0) {
+    // For +10s:
+    mainVideo.currentTime = Math.min(mainVideo.currentTime + 10, mainVideo.duration);
+  } else {
+    // For -10s:
+    mainVideo.currentTime = Math.max(mainVideo.currentTime - 10, 0);
   }
 
   if (typeof window.triggerYtSkipAnimation === 'function') {
-    window.triggerYtSkipAnimation(step);
+    window.triggerYtSkipAnimation(seconds);
   }
   resetMainPlayerControlsTimer();
 }
 
 export function seekMainVideo(e) {
-  if (e && e.stopPropagation) e.stopPropagation();
+  // 1. Stop Event Bubbling
+  if (e) {
+    if (typeof e.preventDefault === 'function') e.preventDefault();
+    if (typeof e.stopPropagation === 'function') e.stopPropagation();
+  }
   const mainVideo = getMainVideoElement();
   const mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
   if (!mainVideo || !mainProgressBar) return;
 
-  const duration = mainVideo.duration;
-  if (!Number.isFinite(duration) || duration <= 0 || isNaN(duration)) {
-    return;
-  }
+  // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
+  if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
+  if (!e || typeof e.clientX !== 'number' || isNaN(e.clientX)) return;
 
-  const barWidth = mainProgressBar.offsetWidth;
-  if (!barWidth || barWidth <= 0) return;
+  // 3. Safe Math for Timeline Scrubbing:
+  const rect = mainProgressBar.getBoundingClientRect();
+  if (!rect.width || isNaN(rect.width) || rect.width <= 0) return;
+  const pos = (e.clientX - rect.left) / rect.width;
+  if (isNaN(pos) || !Number.isFinite(pos)) return;
 
-  // Accurately calculate (e.offsetX / mainProgressBar.offsetWidth) * mainVideo.duration
-  let clickX = (e && typeof e.offsetX === 'number' && !isNaN(e.offsetX) && e.currentTarget === mainProgressBar)
-    ? e.offsetX
-    : ((e && typeof e.clientX === 'number') ? (e.clientX - mainProgressBar.getBoundingClientRect().left) : 0);
+  mainVideo.currentTime = Math.max(0, Math.min(pos * mainVideo.duration, mainVideo.duration));
 
-  clickX = Math.max(0, Math.min(barWidth, clickX));
-
-  const newTime = (clickX / barWidth) * duration;
-  if (Number.isFinite(newTime) && !isNaN(newTime)) {
-    mainVideo.currentTime = newTime;
+  const fill = document.getElementById('main-progress-fill');
+  if (fill && mainVideo.duration > 0) {
+    fill.style.width = `${Math.min(100, Math.max(0, (mainVideo.currentTime / mainVideo.duration) * 100))}%`;
   }
 
   resetMainPlayerControlsTimer();
+}
+
+export function attachMainPlayerSeekSkipListeners() {
+  // 5. Ensure these event listeners are attached strictly to the main player UI elements and only attached ONCE.
+  const skipFwd = document.getElementById('main-skip-forward');
+  if (skipFwd && !skipFwd._skipListenerBound) {
+    skipFwd._skipListenerBound = true;
+    skipFwd.addEventListener('click', (e) => {
+      // 1. Stop Event Bubbling: prevent triggering main video wrapper's play/pause toggle
+      e.preventDefault();
+      e.stopPropagation();
+
+      const mainVideo = getMainVideoElement();
+      if (!mainVideo) return;
+      // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
+      if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
+      if (isNaN(mainVideo.currentTime) || !Number.isFinite(mainVideo.currentTime)) {
+        mainVideo.currentTime = 0;
+      }
+
+      // 2. Safe Math for Skip: For +10s
+      mainVideo.currentTime = Math.min(mainVideo.currentTime + 10, mainVideo.duration);
+
+      if (typeof window.triggerYtSkipAnimation === 'function') {
+        window.triggerYtSkipAnimation(10);
+      }
+      resetMainPlayerControlsTimer();
+    });
+  }
+
+  const skipBack = document.getElementById('main-skip-backward');
+  if (skipBack && !skipBack._skipListenerBound) {
+    skipBack._skipListenerBound = true;
+    skipBack.addEventListener('click', (e) => {
+      // 1. Stop Event Bubbling: prevent triggering main video wrapper's play/pause toggle
+      e.preventDefault();
+      e.stopPropagation();
+
+      const mainVideo = getMainVideoElement();
+      if (!mainVideo) return;
+      // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
+      if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
+      if (isNaN(mainVideo.currentTime) || !Number.isFinite(mainVideo.currentTime)) {
+        mainVideo.currentTime = 0;
+      }
+
+      // 2. Safe Math for Skip: For -10s
+      mainVideo.currentTime = Math.max(mainVideo.currentTime - 10, 0);
+
+      if (typeof window.triggerYtSkipAnimation === 'function') {
+        window.triggerYtSkipAnimation(-10);
+      }
+      resetMainPlayerControlsTimer();
+    });
+  }
+
+  const mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
+  if (mainProgressBar && !mainProgressBar._seekListenerBound) {
+    mainProgressBar._seekListenerBound = true;
+    mainProgressBar.addEventListener('click', (e) => {
+      // 1. Stop Event Bubbling: prevent triggering main video wrapper's play/pause toggle
+      e.preventDefault();
+      e.stopPropagation();
+
+      const mainVideo = getMainVideoElement();
+      if (!mainVideo) return;
+      // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
+      if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
+      if (!e || typeof e.clientX !== 'number' || isNaN(e.clientX)) return;
+
+      // 3. Safe Math for Timeline Scrubbing:
+      const rect = mainProgressBar.getBoundingClientRect();
+      if (!rect.width || isNaN(rect.width) || rect.width <= 0) return;
+      const pos = (e.clientX - rect.left) / rect.width;
+      if (isNaN(pos) || !Number.isFinite(pos)) return;
+
+      mainVideo.currentTime = Math.max(0, Math.min(pos * mainVideo.duration, mainVideo.duration));
+
+      const fill = document.getElementById('main-progress-fill');
+      if (fill && mainVideo.duration > 0) {
+        fill.style.width = `${Math.min(100, Math.max(0, (mainVideo.currentTime / mainVideo.duration) * 100))}%`;
+      }
+      resetMainPlayerControlsTimer();
+    });
+  }
 }
 
 export function setupMainPlayerVideoListeners(video) {
@@ -409,6 +497,9 @@ export function initMainPlayerControlsAutoHide() {
   const video = getMainVideoElement();
   if (!stage) return;
 
+  // Always make sure seek/skip listeners are bound strictly once to main UI controls
+  attachMainPlayerSeekSkipListeners();
+
   if (stage._mainAutoHideInitialized) {
     if (video) setupMainPlayerVideoListeners(video);
     return;
@@ -437,34 +528,6 @@ export function initMainPlayerControlsAutoHide() {
       hideMainPlayerControls();
     }
   });
-
-  // Dedicated button click bindings for main skip forward/backward and progress bar
-  const skipFwd = document.getElementById('main-skip-forward');
-  if (skipFwd && !skipFwd._skipBound) {
-    skipFwd._skipBound = true;
-    skipFwd.addEventListener('click', (e) => {
-      e.stopPropagation();
-      skipMainVideo(10);
-    });
-  }
-
-  const skipBack = document.getElementById('main-skip-backward');
-  if (skipBack && !skipBack._skipBound) {
-    skipBack._skipBound = true;
-    skipBack.addEventListener('click', (e) => {
-      e.stopPropagation();
-      skipMainVideo(-10);
-    });
-  }
-
-  const progBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
-  if (progBar && !progBar._scrubBound) {
-    progBar._scrubBound = true;
-    progBar.addEventListener('click', (e) => {
-      e.stopPropagation();
-      seekMainVideo(e);
-    });
-  }
 
   if (video) {
     setupMainPlayerVideoListeners(video);
@@ -943,5 +1006,6 @@ if (typeof window !== "undefined") {
   window.seekMainVideo = seekMainVideo;
   window.skipYtTime = skipMainVideo;
   window.seekYtVideo = seekMainVideo;
+  window.attachMainPlayerSeekSkipListeners = attachMainPlayerSeekSkipListeners;
   window.getMainVideoElement = getMainVideoElement;
 }
