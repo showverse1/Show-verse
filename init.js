@@ -301,49 +301,24 @@ export function playMedia(title, url, resumeTime = 0, meta = {}) {
     if (saved && saved.currentTime > 2) seekTo = saved.currentTime;
   }
 
-  if (window.showBufferingSpinner) window.showBufferingSpinner();
-  mainVid.src = targetUrl;
-  mainVid.load();
-
-  if (window.setupVideoListeners) {
-    window.setupVideoListeners(mainVid);
+  if (typeof window.loadVideoWithPlyr === 'function') {
+    window.loadVideoWithPlyr(mainVid, targetUrl, seekTo, {
+      onEnded: () => {
+        if (window.showToast) window.showToast("Playback completed");
+      }
+    });
   }
-
-  const applyResume = () => {
-    if (seekTo > 0 && Number.isFinite(seekTo) && mainVid.duration && seekTo < mainVid.duration) {
-      mainVid.currentTime = seekTo;
-      showToast(`Resumed from ${formatTime(seekTo)}`);
-    }
-  };
-  mainVid.addEventListener('loadedmetadata', applyResume, { once: true });
-
-  mainVid.play().then(() => {
-    if (window.updatePlayIcon) window.updatePlayIcon(true);
-    if (window.resetControlsTimer) window.resetControlsTimer();
-  }).catch(() => {
-    if (window.updatePlayIcon) window.updatePlayIcon(false);
-    if (window.showControls) window.showControls();
-    if (window.hideBufferingSpinner) window.hideBufferingSpinner();
-  });
-
-  initVideoListeners(mainVid);
 }
 
 export function closePlayer() {
   const modal = document.getElementById('playerModal');
-  const mainVid = document.getElementById('mainVideo');
-  if (mainVid) {
-    saveContinueWatchingProgress(mainVid.currentTime, mainVid.duration);
-    mainVid.pause();
+  if (typeof window.destroyCurrentPlayer === 'function') {
+    window.destroyCurrentPlayer();
   }
-  if (window.hideBufferingSpinner) window.hideBufferingSpinner();
-  if (window.cancelControlsTimer) window.cancelControlsTimer();
-  if (window.showControls) window.showControls();
   if (document.fullscreenElement || document.webkitFullscreenElement) {
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
   }
-  if (window.unlockScreen) window.unlockScreen();
   if (modal) modal.classList.add('hidden');
   document.body.classList.remove('overflow-hidden');
 }

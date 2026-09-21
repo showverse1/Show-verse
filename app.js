@@ -788,7 +788,7 @@ export function openShowPlayerPage(showKeyOrTitle, episodeIndex = 0, resumeTime 
 function loadActiveYtEpisode(index, resumeTime = 0) {
   if (!currentSelectedShow || !currentSelectedShow.episodes[index]) return;
   const episode = currentSelectedShow.episodes[index];
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
+  const video = document.getElementById('main-video') || document.querySelector('#ytPlayerStage video');
   const curEpTitle = document.getElementById('ytCurrentEpisodeTitle');
   const badgeQuality = document.getElementById('ytBadgeQuality');
 
@@ -815,39 +815,10 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
   }
 
   if (video) {
-    if (window.showYtBufferingSpinner) window.showYtBufferingSpinner();
-    if (window.initMainPlayerControlsAutoHide) window.initMainPlayerControlsAutoHide();
-    if (window.attachMainPlayerSeekSkipListeners) window.attachMainPlayerSeekSkipListeners();
-    if (window.wipeAndAttachMainPlayerSeekSkipListeners) window.wipeAndAttachMainPlayerSeekSkipListeners();
-    if (window.setupMainPlayerVideoListeners) window.setupMainPlayerVideoListeners(video);
     const targetUrl = episode.videoUrl || '';
     if (!targetUrl) {
       if (window.showToast) window.showToast("No video stream URL found for this episode.");
       return;
-    }
-
-    if (window.mainHls) {
-      try {
-        window.mainHls.destroy();
-      } catch (e) {}
-      window.mainHls = null;
-      video._hls = null;
-    }
-
-    const isHls = targetUrl.includes('.m3u8');
-    if (isHls && window.Hls && window.Hls.isSupported()) {
-      const hls = new window.Hls({
-        enableWorker: true,
-        lowLatencyMode: true
-      });
-      hls.loadSource(targetUrl);
-      hls.attachMedia(video);
-      video._hls = hls;
-      window.mainHls = hls;
-      window.activeHls = hls;
-    } else {
-      video.src = targetUrl;
-      video.load();
     }
 
     let seekTo = Number(resumeTime) || 0;
@@ -859,37 +830,16 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
       }
     }
 
-    const applyResume = () => {
-      if (seekTo > 0 && Number.isFinite(seekTo) && video.duration && seekTo < video.duration) {
-        if (typeof window.executeSafeSeek === 'function') {
-          window.executeSafeSeek(seekTo);
-        } else {
-          video.currentTime = seekTo;
+    if (typeof window.loadVideoWithPlyr === 'function') {
+      window.loadVideoWithPlyr(video, targetUrl, seekTo, {
+        onEnded: () => {
+          if (currentSelectedShow && currentSelectedEpisodeIndex < currentSelectedShow.episodes.length - 1) {
+            if (window.showToast) window.showToast("Playing next episode...");
+            switchYtEpisode(currentSelectedEpisodeIndex + 1);
+          }
         }
-        if (window.showToast) window.showToast(`Resumed Ep ${episode.episodeNumber} at ${formatDuration(seekTo)}`);
-      }
-    };
-    video.addEventListener('loadedmetadata', applyResume, { once: true });
-
-    const p = video.play();
-    if (p !== undefined) {
-      p.then(() => {
-        updateYtPlayIcon(true);
-        if (window.showMainPlayerControls) window.showMainPlayerControls();
-        if (window.resetMainPlayerControlsTimer) window.resetMainPlayerControlsTimer();
-      })
-       .catch(() => {
-        updateYtPlayIcon(false);
-        if (window.showMainPlayerControls) window.showMainPlayerControls();
-        if (window.hideYtBufferingSpinner) window.hideYtBufferingSpinner();
       });
     }
-
-    initYtVideoListeners();
-    if (typeof window.setupMainPlayerDelegatedEvents === 'function') window.setupMainPlayerDelegatedEvents();
-    if (typeof window.attachPlayerEvents === 'function') window.attachPlayerEvents();
-    if (typeof window.wipeAndAttachMainPlayerSeekSkipListeners === 'function') window.wipeAndAttachMainPlayerSeekSkipListeners();
-    if (typeof window.initMainPlayerControlsAutoHide === 'function') window.initMainPlayerControlsAutoHide();
   }
 }
 
@@ -989,10 +939,6 @@ export function switchYtEpisode(index) {
   loadActiveYtEpisode(index);
   renderYtEpisodesRow();
 
-  if (typeof window.setupMainPlayerDelegatedEvents === 'function') window.setupMainPlayerDelegatedEvents();
-  if (typeof window.attachPlayerEvents === 'function') window.attachPlayerEvents();
-  if (typeof window.wipeAndAttachMainPlayerSeekSkipListeners === 'function') window.wipeAndAttachMainPlayerSeekSkipListeners();
-
   const stage = document.getElementById('ytPlayerStage');
   if (stage) {
     stage.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1000,10 +946,9 @@ export function switchYtEpisode(index) {
 }
 
 export function closeShowPlayerPage() {
-  pauseYtVideo();
-  if (window.cancelMainPlayerControlsTimer) window.cancelMainPlayerControlsTimer();
-  if (window.showMainPlayerControls) window.showMainPlayerControls();
-  if (window.hideYtBufferingSpinner) window.hideYtBufferingSpinner();
+  if (typeof window.destroyCurrentPlayer === 'function') {
+    window.destroyCurrentPlayer();
+  }
   const showPlayerPage = document.getElementById('showPlayerPage');
   const homeView = document.getElementById('homeView');
   const dedicatedCategoryView = document.getElementById('dedicatedCategoryView');
@@ -1023,171 +968,21 @@ export function closeShowPlayerPage() {
   }
 }
 
-function initYtVideoListeners() {
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
-  if (!video) return;
-
-  let lastSave = 0;
-  video.ontimeupdate = () => {
-    const cur = video.currentTime;
-    const dur = video.duration;
-    if (!Number.isFinite(dur) || dur <= 0 || !Number.isFinite(cur)) return;
-    const pct = Math.max(0, Math.min(100, (cur / dur) * 100));
-    const progressBar = document.getElementById('main-progress-fill') || document.getElementById('ytProgressBar');
-    const timeDisplay = document.getElementById('main-time-display') || document.getElementById('ytTimeDisplay');
-    if (progressBar) progressBar.style.width = `${pct}%`;
-    if (timeDisplay) timeDisplay.innerText = `${formatDuration(cur)} / ${formatDuration(dur)}`;
-
-    const curSec = Math.floor(cur);
-    if (curSec - lastSave >= 3) {
-      lastSave = curSec;
-      if (typeof window.saveContinueWatchingProgress === 'function') {
-        window.saveContinueWatchingProgress(cur, dur);
-      }
-    }
-
-    if (video.buffered && video.buffered.length > 0) {
-      const bEnd = video.buffered.end(video.buffered.length - 1);
-      if (Number.isFinite(bEnd)) {
-        const bPct = Math.max(0, Math.min(100, (bEnd / dur) * 100));
-        const bBar = document.getElementById('ytBufferedBar');
-        if (bBar) bBar.style.width = `${bPct}%`;
-      }
-    }
-  };
-
-  video.onpause = () => {
-    updateYtPlayIcon(false);
-    if (window.cancelMainPlayerControlsTimer) window.cancelMainPlayerControlsTimer();
-    if (window.showMainPlayerControls) window.showMainPlayerControls();
-    if (typeof window.saveContinueWatchingProgress === 'function') {
-      window.saveContinueWatchingProgress(video.currentTime, video.duration);
-    }
-  };
-
-  video.onplay = () => {
-    updateYtPlayIcon(true);
-    if (window.showMainPlayerControls) window.showMainPlayerControls();
-    if (window.resetMainPlayerControlsTimer) window.resetMainPlayerControlsTimer();
-  };
-
-  video.onended = () => {
-    updateYtPlayIcon(false);
-    if (window.cancelMainPlayerControlsTimer) window.cancelMainPlayerControlsTimer();
-    if (window.showMainPlayerControls) window.showMainPlayerControls();
-    if (typeof window.saveContinueWatchingProgress === 'function') {
-      window.saveContinueWatchingProgress(video.currentTime, video.duration);
-    }
-    if (currentSelectedShow && currentSelectedEpisodeIndex < currentSelectedShow.episodes.length - 1) {
-      if (window.showToast) window.showToast("Playing next episode...");
-      switchYtEpisode(currentSelectedEpisodeIndex + 1);
-    }
-  };
-}
-
 export function toggleYtPlay() {
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
-  if (!video) return;
-  if (video.paused) {
-    video.play();
-    updateYtPlayIcon(true);
-    if (window.showMainPlayerControls) window.showMainPlayerControls();
-    if (window.resetMainPlayerControlsTimer) window.resetMainPlayerControlsTimer();
+  if (window.activePlyr) {
+    window.activePlyr.togglePlay();
   } else {
-    video.pause();
-    updateYtPlayIcon(false);
-    if (window.cancelMainPlayerControlsTimer) window.cancelMainPlayerControlsTimer();
-    if (window.showMainPlayerControls) window.showMainPlayerControls();
+    const video = document.getElementById('main-video') || document.querySelector('video');
+    if (video) video.paused ? video.play() : video.pause();
   }
 }
 
 export function pauseYtVideo() {
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
-  if (video && !video.paused) {
-    video.pause();
-    updateYtPlayIcon(false);
-  }
-}
-
-function updateYtPlayIcon(isPlaying) {
-  const icon = document.getElementById('ytPlayIcon');
-  if (icon) {
-    icon.setAttribute('data-lucide', isPlaying ? 'pause' : 'play');
-    if (window.lucide) window.lucide.createIcons();
-  }
-}
-
-let ytSkipAnimTimeout = null;
-let ytLastTapTime = 0;
-let ytLastTapX = 0;
-let ytSingleTapTimeout = null;
-
-export function triggerYtSkipAnimation(seconds) {
-  const isForward = seconds > 0;
-  const leftEl = document.getElementById('ytSkipLeftIndicator');
-  const rightEl = document.getElementById('ytSkipRightIndicator');
-  const targetEl = isForward ? rightEl : leftEl;
-  const otherEl = isForward ? leftEl : rightEl;
-  const textEl = document.getElementById(isForward ? 'ytSkipRightText' : 'ytSkipLeftText');
-
-  if (otherEl) {
-    otherEl.classList.remove('animate-skip-left', 'animate-skip-right');
-  }
-  if (targetEl) {
-    if (textEl) textEl.innerText = `${isForward ? '+' : ''}${seconds}s`;
-    targetEl.classList.remove('animate-skip-left', 'animate-skip-right');
-    void targetEl.offsetWidth;
-    targetEl.classList.add(isForward ? 'animate-skip-right' : 'animate-skip-left');
-
-    if (ytSkipAnimTimeout) clearTimeout(ytSkipAnimTimeout);
-    ytSkipAnimTimeout = setTimeout(() => {
-      targetEl.classList.remove('animate-skip-left', 'animate-skip-right');
-    }, 650);
-  }
-}
-
-export function handleYtPlayerTap(e) {
-  if (e.target.closest('button, input, select, a, #main-progress-bar, #ytScrubContainer, #main-player-ui-wrapper .space-y-3, #main-player-ui-wrapper .pointer-events-auto, #ytControlsOverlay')) {
-    return;
-  }
-  const stage = document.getElementById('ytPlayerStage');
-  if (!stage) return;
-
-  // If controls were currently hidden and video is playing, first tap reveals controls instead of toggling play
-  if (typeof window.areMainPlayerControlsHidden === 'function' && window.areMainPlayerControlsHidden()) {
-    if (window.showMainPlayerControls) window.showMainPlayerControls();
-    if (window.resetMainPlayerControlsTimer) window.resetMainPlayerControlsTimer();
-    return;
-  }
-
-  const now = Date.now();
-  const tapDelay = now - ytLastTapTime;
-  const rect = stage.getBoundingClientRect();
-  const tapX = e.clientX - rect.left;
-  const width = rect.width;
-
-  if (tapDelay < 320 && Math.abs(tapX - ytLastTapX) < 120) {
-    // DOUBLE TAP DETECTED
-    if (ytSingleTapTimeout) {
-      clearTimeout(ytSingleTapTimeout);
-      ytSingleTapTimeout = null;
-    }
-    ytLastTapTime = 0;
-    if (tapX < width * 0.42) {
-      skipMainVideo(-10);
-    } else if (tapX > width * 0.58) {
-      skipMainVideo(10);
-    } else {
-      toggleYtPlay();
-    }
+  if (window.activePlyr) {
+    window.activePlyr.pause();
   } else {
-    ytLastTapTime = now;
-    ytLastTapX = tapX;
-    if (ytSingleTapTimeout) clearTimeout(ytSingleTapTimeout);
-    ytSingleTapTimeout = setTimeout(() => {
-      toggleYtPlay();
-      ytSingleTapTimeout = null;
-    }, 280);
+    const video = document.getElementById('main-video') || document.querySelector('video');
+    if (video && !video.paused) video.pause();
   }
 }
 
@@ -1195,20 +990,11 @@ export function skipMainVideo(seconds, e) {
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
-    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
   }
-  if (typeof window.executeMainPlayerSkip === 'function') {
-    return window.executeMainPlayerSkip(seconds);
-  }
-  if (typeof window.executeSafeSeek === 'function') {
-    const video = document.getElementById('main-video') || document.getElementById('ytVideo') || document.getElementById('mainVideo');
-    if (!video || isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) return;
-    const cur = (isNaN(video.currentTime) || !Number.isFinite(video.currentTime)) ? 0 : video.currentTime;
+  if (window.activePlyr) {
     const secNum = Number(seconds) || 10;
-    const target = secNum > 0 ? Math.min(cur + 10, video.duration) : Math.max(cur - 10, 0);
-    window.executeSafeSeek(target);
-    triggerYtSkipAnimation(secNum);
-    return;
+    if (secNum > 0) window.activePlyr.forward(secNum);
+    else window.activePlyr.rewind(Math.abs(secNum));
   }
 }
 export const skipYtTime = skipMainVideo;
@@ -1217,89 +1003,40 @@ export function seekMainVideo(e) {
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
-    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
   }
-  if (typeof window.executeMainPlayerScrub === 'function') {
-    return window.executeMainPlayerScrub(e);
-  }
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo') || document.getElementById('mainVideo');
-  const mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
-  if (!video || !mainProgressBar || isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) return;
-  
-  let clientX = e ? e.clientX : NaN;
-  if (typeof clientX !== 'number' || isNaN(clientX)) {
-    if (e && e.touches && e.touches[0] && typeof e.touches[0].clientX === 'number') {
-      clientX = e.touches[0].clientX;
-    } else if (e && e.changedTouches && e.changedTouches[0] && typeof e.changedTouches[0].clientX === 'number') {
-      clientX = e.changedTouches[0].clientX;
-    }
-  }
-  if (typeof clientX !== 'number' || isNaN(clientX)) return;
-
-  const rect = mainProgressBar.getBoundingClientRect();
-  if (!rect.width || isNaN(rect.width) || rect.width <= 0) return;
-  const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  if (isNaN(pos) || !Number.isFinite(pos)) return;
-
-  const targetTime = Math.max(0, Math.min(pos * video.duration, video.duration));
-  if (typeof window.executeSafeSeek === 'function') {
-    window.executeSafeSeek(targetTime);
-  } else {
-    video.currentTime = targetTime;
-  }
+  // Let the native Plyr control bar handle the seek event naturally
 }
 export const seekYtVideo = seekMainVideo;
 
 export function changeYtVolume(val) {
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
-  if (!video) return;
-  video.volume = Math.max(0, Math.min(1, Number(val)));
-  const icon = document.getElementById('ytVolumeIcon');
-  if (icon) {
-    icon.setAttribute('data-lucide', video.volume === 0 ? 'volume-x' : 'volume-2');
-    if (window.lucide) window.lucide.createIcons();
+  if (window.activePlyr) {
+    window.activePlyr.volume = Number(val);
   }
 }
 
 export function toggleYtMute() {
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
-  if (!video) return;
-  video.muted = !video.muted;
-  const slider = document.getElementById('ytVolumeSlider');
-  if (slider) slider.value = video.muted ? 0 : video.volume;
-  changeYtVolume(video.muted ? 0 : 1);
+  if (window.activePlyr) {
+    window.activePlyr.muted = !window.activePlyr.muted;
+  }
 }
 
 export function toggleYtAmbient() {
-  const stage = document.getElementById('ytPlayerStage');
-  const btn = document.getElementById('ytAmbientBtn');
-  if (!stage) return;
-  isYtAmbientOn = !isYtAmbientOn;
-  if (isYtAmbientOn) {
-    stage.classList.add('yt-player-glow');
-    if (btn) btn.classList.add('text-brand-cyan');
-    if (window.showToast) window.showToast("Ambient Lighting: ON");
-  } else {
-    stage.classList.remove('yt-player-glow');
-    if (btn) btn.classList.remove('text-brand-cyan');
-    if (window.showToast) window.showToast("Ambient Lighting: OFF");
+  if (typeof window.toggleAmbientLighting === 'function') {
+    window.toggleAmbientLighting();
   }
 }
 
 export function toggleYtFullscreen() {
-  const stage = document.getElementById('ytPlayerStage');
-  if (!stage) return;
-  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-    if (stage.requestFullscreen) {
-      stage.requestFullscreen().catch(() => {});
-    } else if (stage.webkitRequestFullscreen) {
-      stage.webkitRequestFullscreen();
-    }
+  if (window.activePlyr && window.activePlyr.fullscreen) {
+    window.activePlyr.fullscreen.toggle();
   } else {
-    if (document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
-    } else if (document.webkitExitFullscreen) {
-      document.webkitExitFullscreen();
+    const stage = document.getElementById('ytPlayerStage') || document.getElementById('playerStage');
+    if (stage) {
+      if (!document.fullscreenElement) {
+        stage.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
     }
   }
 }
@@ -1320,6 +1057,9 @@ export function toggleFullscreenPlayerModal() {
     }
   }
 }
+
+export function handleYtPlayerTap() {}
+export function triggerYtSkipAnimation() {}
 
 // Global Exports
 export function scrollSlider(rowId, distance) {

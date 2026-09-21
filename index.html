@@ -60,6 +60,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Plyr CSS & JS (Modern HTML5 / HLS Media Player) -->
+  <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+  <script src="https://cdn.plyr.io/3.7.8/plyr.polyfilled.js"></script>
   <!-- HLS.js for .m3u8 adaptive streaming support -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
@@ -93,6 +96,49 @@
   </script>
 
   <style>
+    /* Plyr Showcase Branding Overrides */
+    :root {
+      --plyr-color-main: #00F0FF;
+      --plyr-video-control-color: #ffffff;
+      --plyr-video-control-color-hover: #00F0FF;
+      --plyr-video-controls-background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.88));
+      --plyr-range-fill-background: #00F0FF;
+      --plyr-badge-text-color: #000000;
+      --plyr-badge-background: #00F0FF;
+      --plyr-menu-background: rgba(13, 17, 26, 0.96);
+      --plyr-menu-color: #ffffff;
+      --plyr-menu-border-color: rgba(255, 255, 255, 0.1);
+      --plyr-menu-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      --plyr-font-family: "Plus Jakarta Sans", sans-serif;
+    }
+    .plyr {
+      width: 100% !important;
+      height: 100% !important;
+      border-radius: 1.25rem;
+    }
+    .plyr--video {
+      background-color: #000000;
+    }
+    .plyr__menu__container {
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 1rem;
+      padding: 0.5rem;
+    }
+    .plyr__control--overlaid {
+      background: rgba(0, 240, 255, 0.9) !important;
+      color: #000 !important;
+      box-shadow: 0 0 30px rgba(0, 240, 255, 0.5);
+    }
+    .plyr__control--overlaid:hover {
+      background: #00F0FF !important;
+      transform: scale(1.08);
+    }
+    .plyr--full-ui input[type=range] {
+      color: #00F0FF !important;
+    }
+
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #07090E; }
     ::-webkit-scrollbar-thumb { background: #1E2638; border-radius: 4px; }
@@ -424,105 +470,26 @@
       <button onclick="closeShowPlayerPage()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition cursor-pointer">
         <i data-lucide="arrow-left" class="w-4 h-4"></i> Back to Browse
       </button>
-      <div class="text-xs text-slate-400 flex items-center gap-1.5">
-        <span class="cursor-pointer hover:text-brand-cyan" onclick="closeShowPlayerPage()">Home</span>
-        <span>/</span>
-        <span id="ytBreadcrumbCategory" class="text-slate-300">Anime</span>
-        <span>/</span>
-        <span id="ytBreadcrumbTitle" class="text-brand-cyan font-bold truncate max-w-[200px]">Title</span>
+      <div class="flex items-center gap-3">
+        <button onclick="toggleYtAmbient()" id="ytAmbientBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-brand-cyan transition cursor-pointer" title="Toggle Ambient Glow">
+          <i data-lucide="sun" class="w-4 h-4"></i>
+        </button>
+        <div class="text-xs text-slate-400 flex items-center gap-1.5">
+          <span class="cursor-pointer hover:text-brand-cyan" onclick="closeShowPlayerPage()">Home</span>
+          <span>/</span>
+          <span id="ytBreadcrumbCategory" class="text-slate-300">Anime</span>
+          <span>/</span>
+          <span id="ytBreadcrumbTitle" class="text-brand-cyan font-bold truncate max-w-[200px]">Title</span>
+        </div>
       </div>
     </div>
 
-    <!-- The 16:9 Video Player -->
+    <!-- The 16:9 Video Player Container for Plyr -->
     <div class="space-y-4">
-      <div id="ytPlayerStage" onclick="handleYtPlayerTap(event)" class="relative w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden bg-black shadow-2xl border border-white/10 yt-player-glow group select-none cursor-pointer">
+      <div id="ytPlayerStage" class="relative w-full aspect-video rounded-2xl md:rounded-3xl overflow-hidden bg-black shadow-2xl border border-white/10 yt-player-glow">
         <video id="main-video" class="w-full h-full object-contain" playsinline preload="metadata">
           <track id="ytSubtitleTrack" kind="subtitles" srclang="en" label="English CC" default>
         </video>
-        
-        <!-- Centered Buffering Indicator (Loading Spinner) for Main Player -->
-        <div id="ytBufferingSpinner" class="hidden absolute inset-0 z-25 flex items-center justify-center bg-black/45 backdrop-blur-[2px] transition-opacity duration-200 pointer-events-none">
-          <div class="flex flex-col items-center gap-3">
-            <div class="relative flex items-center justify-center">
-              <div class="w-14 h-14 md:w-16 md:h-16 rounded-full border-4 border-brand-cyan/20 animate-ping absolute"></div>
-              <div class="w-10 h-10 md:w-12 md:h-12 rounded-full border-3 md:border-4 border-white/20 border-t-brand-cyan animate-spin shadow-neon-cyan"></div>
-            </div>
-            <span class="text-xs md:text-sm font-semibold tracking-widest text-brand-cyan uppercase font-mono drop-shadow">Buffering...</span>
-          </div>
-        </div>
-
-        <!-- Double-Tap Indicators -->
-        <div id="ytSkipLeftIndicator" class="skip-indicator-overlay skip-left">
-          <div class="skip-indicator-pill">
-            <i data-lucide="rotate-ccw" class="w-5 h-5 text-brand-cyan"></i>
-            <span id="ytSkipLeftText">-10s</span>
-          </div>
-        </div>
-        <div id="ytSkipRightIndicator" class="skip-indicator-overlay skip-right">
-          <div class="skip-indicator-pill">
-            <i data-lucide="rotate-cw" class="w-5 h-5 text-brand-cyan"></i>
-            <span id="ytSkipRightText">+10s</span>
-          </div>
-        </div>
-
-        <!-- MASTER MAIN PLAYER UI CONTROLS WRAPPER (Auto-Hide Controls) -->
-        <div id="main-player-ui-wrapper" class="absolute inset-0 z-30 flex flex-col justify-between p-4 md:p-6 bg-gradient-to-t from-black/95 via-transparent to-black/80 opacity-100 transition-opacity duration-300 pointer-events-none">
-          <div id="mainPlayerTopBar" class="pointer-events-auto flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <span id="ytBadgeQuality" class="px-2.5 py-0.5 rounded-full bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan text-[10px] font-black uppercase">
-                1080P MASTER
-              </span>
-              <span id="ytBadgeAudio" class="px-2.5 py-0.5 rounded-full bg-white/10 text-slate-300 text-[10px] font-bold">
-                DOLBY ATMOS 5.1
-              </span>
-            </div>
-            <div class="flex items-center gap-2">
-              <button onclick="toggleYtAmbient()" id="ytAmbientBtn" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-brand-cyan transition cursor-pointer" title="Toggle Ambient Glow">
-                <i data-lucide="sun" class="w-4 h-4"></i>
-              </button>
-              <button onclick="toggleYtFullscreen()" class="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Fullscreen Mode">
-                <i data-lucide="maximize" class="w-4 h-4"></i>
-              </button>
-            </div>
-          </div>
-
-          <div id="mainPlayerBottomBar" class="pointer-events-auto space-y-3">
-            <div class="flex items-center gap-3">
-              <span id="main-time-display" class="text-xs font-mono text-slate-300 w-24">00:00 / 00:00</span>
-              <div id="main-progress-bar" onclick="seekMainVideo(event)" class="timeline-class timeline-bar main-timeline-bar relative flex-1 h-3 flex items-center cursor-pointer group/bar" data-action="seek-timeline">
-                <div class="w-full h-1.5 bg-white/20 rounded-full overflow-hidden relative pointer-events-none">
-                  <div id="ytBufferedBar" class="absolute top-0 left-0 bottom-0 bg-white/30 w-0 transition-all pointer-events-none"></div>
-                  <div id="main-progress-fill" class="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-brand-cyan to-indigo-500 w-0 shadow-neon-cyan pointer-events-none"></div>
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2 sm:gap-3">
-                <button id="main-play-btn" onclick="toggleYtPlay()" class="p-2.5 rounded-xl bg-brand-cyan text-black hover:bg-cyan-300 shadow-neon-cyan transition cursor-pointer">
-                  <i data-lucide="play" id="ytPlayIcon" class="w-4 h-4 fill-black"></i>
-                </button>
-                <button id="main-skip-backward" onclick="skipMainVideo(-10, event)" class="skip-button-class skip-backward-btn main-skip-backward-btn p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Rewind 10s" data-action="skip-backward">
-                  <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
-                </button>
-                <button id="main-skip-forward" onclick="skipMainVideo(10, event)" class="skip-button-class skip-forward-btn main-skip-forward-btn p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Fast-forward 10s" data-action="skip-forward">
-                  <i data-lucide="rotate-cw" class="w-4 h-4"></i>
-                </button>
-                <div class="hidden sm:flex items-center gap-2 ml-2">
-                  <button onclick="toggleYtMute()" class="text-slate-300 hover:text-white cursor-pointer">
-                    <i data-lucide="volume-2" id="ytVolumeIcon" class="w-4 h-4"></i>
-                  </button>
-                  <input type="range" id="ytVolumeSlider" min="0" max="1" step="0.05" value="1" oninput="changeYtVolume(this.value)" class="w-16 sm:w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer">
-                </div>
-              </div>
-              <div class="flex items-center gap-2">
-                <button onclick="toggleYtFullscreen()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-slate-200 flex items-center gap-1.5 transition cursor-pointer">
-                  <i data-lucide="expand" class="w-4 h-4 text-brand-cyan"></i>
-                  <span class="hidden sm:inline">Fullscreen</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
@@ -540,6 +507,9 @@
               </span>
               <span id="ytMetaRating" class="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold flex items-center gap-1">
                 ★ 9.8
+              </span>
+              <span id="ytBadgeQuality" class="px-2.5 py-0.5 rounded-full bg-brand-cyan/10 border border-brand-cyan/30 text-brand-cyan text-[10px] font-black uppercase">
+                1080P MASTER
               </span>
             </div>
             <h1 id="ytShowTitle" class="text-2xl md:text-3xl font-black text-white">
@@ -610,167 +580,31 @@
   <!-- ======================================================== -->
   <!-- FULLSCREEN AMBIENT VIDEO PLAYER MODAL -->
   <!-- ======================================================== -->
-  <div id="playerModal" class="hidden fixed inset-0 z-50 bg-black/95 flex flex-col justify-between select-none">
-    <button id="smallUnlockBtn" onclick="unlockScreen(event)" class="hidden absolute top-6 left-6 z-50 px-3.5 py-2 rounded-full bg-black/65 hover:bg-black/90 backdrop-blur-md border border-brand-cyan/40 text-brand-cyan shadow-neon-cyan flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none cursor-pointer" title="Unlock Controls">
-      <i data-lucide="lock" class="w-4 h-4"></i>
-      <span class="text-xs font-bold text-white tracking-wide">Unlock</span>
-    </button>
-    <div id="playerStageContainer" onclick="handlePlayerScreenTap(event)" class="relative flex-1 flex items-center justify-center overflow-hidden px-2 md:px-8 cursor-pointer">
-      <div id="playerStage" class="relative w-full max-w-6xl aspect-video rounded-3xl overflow-hidden ambient-glow-box bg-black shadow-2xl">
+  <div id="playerModal" class="hidden fixed inset-0 z-50 bg-black/95 flex flex-col justify-between select-none p-4 md:p-8">
+    <div class="flex items-center justify-between p-2">
+      <div class="flex items-center gap-3">
+        <button onclick="closePlayer()" class="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white backdrop-blur transition cursor-pointer">
+          <i data-lucide="arrow-left" class="w-5 h-5"></i>
+        </button>
+        <div>
+          <h2 id="playerTitle" class="text-sm md:text-lg font-bold text-white tracking-wide truncate max-w-md">Playing Media</h2>
+          <div class="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+            <span class="text-brand-cyan font-semibold flex items-center gap-1">
+              <span class="w-2 h-2 rounded-full bg-brand-cyan animate-pulse"></span> Ultra-HD Stream
+            </span>
+            <span id="playerResBadge" class="bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded text-[10px] font-bold">4K MASTER</span>
+          </div>
+        </div>
+      </div>
+      <button onclick="closePlayer()" class="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition cursor-pointer" title="Close Player">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+    <div id="playerStageContainer" class="relative flex-1 flex items-center justify-center overflow-hidden py-2">
+      <div id="playerStage" class="relative w-full max-w-6xl aspect-video rounded-3xl overflow-hidden ambient-glow-box bg-black shadow-2xl border border-white/10">
         <video id="mainVideo" class="w-full h-full object-contain" playsinline preload="metadata">
           <track id="mainSubtitleTrack" kind="subtitles" srclang="en" label="English CC" default>
         </video>
-        <!-- Centered Buffering Indicator (Loading Spinner) -->
-        <div id="playerBufferingSpinner" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-black/45 backdrop-blur-[2px] transition-opacity duration-200 pointer-events-none">
-          <div class="flex flex-col items-center gap-3">
-            <div class="relative flex items-center justify-center">
-              <div class="w-14 h-14 md:w-16 md:h-16 rounded-full border-4 border-brand-cyan/20 animate-ping absolute"></div>
-              <div class="w-10 h-10 md:w-12 md:h-12 rounded-full border-3 md:border-4 border-white/20 border-t-brand-cyan animate-spin shadow-neon-cyan"></div>
-            </div>
-            <span class="text-xs md:text-sm font-semibold tracking-widest text-brand-cyan uppercase font-mono drop-shadow">Buffering...</span>
-          </div>
-        </div>
-        <div id="playerSkipLeftIndicator" class="skip-indicator-overlay skip-left">
-          <div class="skip-indicator-pill">
-            <i data-lucide="rotate-ccw" class="w-6 h-6 text-brand-cyan"></i>
-            <span id="playerSkipLeftText">-10s</span>
-          </div>
-        </div>
-        <div id="playerSkipRightIndicator" class="skip-indicator-overlay skip-right">
-          <div class="skip-indicator-pill">
-            <i data-lucide="rotate-cw" class="w-6 h-6 text-brand-cyan"></i>
-            <span id="playerSkipRightText">+10s</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- MASTER CONTROLS WRAPPER (Auto-Hide Controls) -->
-    <div id="player-ui-wrapper" class="absolute inset-0 z-40 flex flex-col justify-between pointer-events-none transition-opacity duration-300">
-      <div id="playerTopBar" class="pointer-events-auto p-4 md:p-6 flex items-center justify-between bg-gradient-to-b from-black/90 to-transparent">
-        <div class="flex items-center gap-4">
-          <button onclick="closePlayer()" class="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white backdrop-blur transition cursor-pointer">
-            <i data-lucide="arrow-left" class="w-5 h-5"></i>
-          </button>
-          <div>
-            <h2 id="playerTitle" class="text-sm md:text-lg font-bold text-white tracking-wide truncate max-w-md">Playing Media</h2>
-            <div class="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
-              <span class="text-emerald-400 font-semibold flex items-center gap-1">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Ultra-Low Latency
-              </span>
-              <span id="playerResBadge" class="bg-brand-cyan/20 text-brand-cyan px-2 py-0.5 rounded text-[10px] font-bold">4K HDR</span>
-            </div>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 md:gap-3">
-          <button onclick="toggleAmbientLighting()" id="ambientToggleBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-brand-cyan/30 text-brand-cyan text-xs font-semibold backdrop-blur transition cursor-pointer">
-            <i data-lucide="sun" class="w-4 h-4"></i>
-            <span class="hidden sm:inline">Ambient Glow: ON</span>
-          </button>
-          <button onclick="toggleLockScreen()" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition cursor-pointer" title="Lock Screen">
-            <i data-lucide="lock" class="w-4 h-4"></i>
-          </button>
-        </div>
-      </div>
-      <div id="playerBottomBar" class="pointer-events-auto p-4 md:p-6 bg-gradient-to-t from-black/95 via-black/80 to-transparent space-y-3">
-        <div class="flex items-center gap-3">
-          <span id="timeDisplay" class="text-xs font-mono text-slate-300 w-24">00:00 / 00:00</span>
-          <div id="scrubContainer" onclick="seekVideo(event)" class="relative flex-1 h-3 flex items-center cursor-pointer group">
-            <div class="w-full h-1.5 bg-white/20 rounded-full overflow-hidden relative">
-              <div id="bufferedBar" class="absolute top-0 left-0 bottom-0 bg-white/30 w-0 transition-all"></div>
-              <div id="progressBar" class="absolute top-0 left-0 bottom-0 bg-gradient-to-r from-brand-cyan to-brand-purple w-0 shadow-neon-cyan"></div>
-            </div>
-          </div>
-        </div>
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2 md:gap-4">
-            <button onclick="togglePlay()" class="p-3 rounded-2xl bg-brand-cyan text-black hover:bg-cyan-300 shadow-neon-cyan transition cursor-pointer">
-              <i data-lucide="play" id="playIcon" class="w-5 h-5 fill-black"></i>
-            </button>
-            <button onclick="skipTime(-10)" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Rewind 10s">
-              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
-            </button>
-            <button onclick="skipTime(10)" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer" title="Fast-forward 10s">
-              <i data-lucide="rotate-cw" class="w-4 h-4"></i>
-            </button>
-            <div class="hidden sm:flex items-center gap-2 ml-2">
-              <button onclick="toggleMute()" class="text-slate-300 hover:text-white cursor-pointer">
-                <i data-lucide="volume-2" id="volumeIcon" class="w-4 h-4"></i>
-              </button>
-              <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="1" oninput="changeVolume(this.value)" class="w-20 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer">
-            </div>
-          </div>
-          <div class="flex items-center gap-2 md:gap-3">
-            <button onclick="toggleAudioSubModal()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-slate-200 flex items-center gap-1.5 transition cursor-pointer">
-              <i data-lucide="subtitles" class="w-4 h-4 text-brand-cyan"></i>
-              <span class="hidden md:inline">Audio & CC</span>
-            </button>
-            <button onclick="toggleQualityModal()" class="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-xs text-brand-cyan font-bold flex items-center gap-1.5 transition cursor-pointer">
-              <i data-lucide="sliders" class="w-4 h-4"></i>
-              <span id="currentQualityBadge">4K Master</span>
-            </button>
-            <button onclick="togglePiP()" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition cursor-pointer" title="Picture in Picture">
-              <i data-lucide="picture-in-picture" class="w-4 h-4"></i>
-            </button>
-            <button id="fullscreenBtn" onclick="toggleFullscreen()" class="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-slate-300 transition cursor-pointer" title="Fullscreen">
-              <i data-lucide="maximize" class="w-4 h-4"></i>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- Subtitle Modal -->
-    <div id="audioSubModal" class="hidden absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div class="w-full max-w-md glass-card rounded-3xl p-6 border border-white/10 shadow-2xl space-y-5">
-        <div class="flex items-center justify-between border-b border-white/10 pb-3">
-          <h3 class="text-sm font-black text-white flex items-center gap-2">
-            <i data-lucide="subtitles" class="w-4 h-4 text-brand-cyan"></i> Subtitles & Audio Stream
-          </h3>
-          <button onclick="toggleAudioSubModal()" class="text-slate-400 hover:text-white cursor-pointer"><i data-lucide="x" class="w-4 h-4"></i></button>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-2">Subtitles (Multi-Language CC)</label>
-          <div class="grid grid-cols-2 gap-2">
-            <button onclick="setSubtitle('English CC')" class="py-2 px-3 rounded-xl bg-brand-cyan/20 border border-brand-cyan text-brand-cyan text-xs font-bold text-left cursor-pointer">English CC (Active)</button>
-            <button onclick="setSubtitle('Japanese')" class="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">Japanese</button>
-            <button onclick="setSubtitle('Korean')" class="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">Korean</button>
-            <button onclick="setSubtitle('Hindi')" class="py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">Hindi</button>
-          </div>
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-300 mb-2">Audio Master Track</label>
-          <div class="grid grid-cols-1 gap-2">
-            <button onclick="setAudioTrack('Original (Dolby Atmos 5.1)')" class="py-2.5 px-3 rounded-xl bg-brand-purple/20 border border-brand-purple text-purple-300 text-xs font-bold text-left flex justify-between cursor-pointer">
-              <span>Original (Dolby Atmos 5.1)</span> <span class="text-[10px] bg-purple-500/40 px-1.5 rounded">STUDIO</span>
-            </button>
-            <button onclick="setAudioTrack('English Studio Dub')" class="py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">English Studio Dub</button>
-            <button onclick="setAudioTrack('Korean Original 5.1')" class="py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs text-left cursor-pointer">Korean Original</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- Quality Modal -->
-    <div id="qualityModal" class="hidden absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div class="w-full max-w-sm glass-card rounded-3xl p-6 border border-white/10 shadow-2xl space-y-4">
-        <div class="flex items-center justify-between border-b border-white/10 pb-3">
-          <h3 class="text-sm font-black text-white flex items-center gap-2">
-            <i data-lucide="sliders" class="w-4 h-4 text-brand-cyan"></i> Video Resolution
-          </h3>
-          <button onclick="toggleQualityModal()" class="text-slate-400 hover:text-white cursor-pointer"><i data-lucide="x" class="w-4 h-4"></i></button>
-        </div>
-        <div class="space-y-2">
-          <button onclick="selectQuality('4K Master HDR')" class="w-full py-2.5 px-3 rounded-xl bg-brand-cyan/20 border border-brand-cyan text-brand-cyan text-xs font-bold flex justify-between items-center cursor-pointer">
-            <span>4K Ultra HD (HEVC 60FPS)</span>
-            <span class="text-[10px] bg-brand-cyan text-black px-1.5 py-0.5 rounded font-black">HDR</span>
-          </button>
-          <button onclick="selectQuality('1080p FHD')" class="w-full py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium flex justify-between items-center cursor-pointer">
-            <span>1080p Full HD</span>
-            <span class="text-[10px] text-slate-400">Crisp</span>
-          </button>
-          <button onclick="selectQuality('720p HD')" class="w-full py-2.5 px-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium flex justify-between items-center cursor-pointer">
-            <span>720p HD</span>
-            <span class="text-[10px] text-slate-400">Data Saver</span>
-          </button>
-        </div>
       </div>
     </div>
   </div>
