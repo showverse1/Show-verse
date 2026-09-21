@@ -220,12 +220,180 @@ export function initPlayerControlsAutoHide() {
   }
 }
 
+// ========================================================
+// 0B. MAIN PUBLIC VIDEO PLAYER AUTO-HIDE ENGINE (3s Inactivity)
+// ========================================================
+let mainControlsFadeTimer = null;
+
+export function areMainPlayerControlsHidden() {
+  const uiWrapper = document.getElementById('main-player-ui-wrapper');
+  const stage = document.getElementById('ytPlayerStage');
+  if (uiWrapper) {
+    return uiWrapper.classList.contains('controls-hidden') || uiWrapper.style.opacity === '0';
+  }
+  return stage ? stage.classList.contains('controls-hidden') : false;
+}
+
+export function showMainPlayerControls() {
+  const uiWrapper = document.getElementById('main-player-ui-wrapper');
+  const stage = document.getElementById('ytPlayerStage');
+  if (uiWrapper) {
+    uiWrapper.style.opacity = '1';
+    uiWrapper.classList.remove('controls-hidden');
+  }
+  if (stage) {
+    stage.classList.remove('controls-hidden');
+  }
+}
+
+export function hideMainPlayerControls() {
+  const video = document.getElementById('ytVideo');
+  const uiWrapper = document.getElementById('main-player-ui-wrapper');
+  const stage = document.getElementById('ytPlayerStage');
+  if (!stage) return;
+
+  // Requirement: If video is paused or ended, controls MUST remain permanently visible
+  if (!video || video.paused || video.ended) {
+    showMainPlayerControls();
+    return;
+  }
+
+  if (uiWrapper) {
+    uiWrapper.style.opacity = '0';
+    uiWrapper.classList.add('controls-hidden');
+  }
+  if (stage) {
+    stage.classList.add('controls-hidden');
+  }
+}
+
+export function cancelMainPlayerControlsTimer() {
+  if (mainControlsFadeTimer) {
+    clearTimeout(mainControlsFadeTimer);
+    mainControlsFadeTimer = null;
+  }
+  showMainPlayerControls();
+}
+
+export function resetMainPlayerControlsTimer() {
+  if (mainControlsFadeTimer) {
+    clearTimeout(mainControlsFadeTimer);
+    mainControlsFadeTimer = null;
+  }
+
+  showMainPlayerControls();
+
+  const stage = document.getElementById('ytPlayerStage');
+  const video = document.getElementById('ytVideo');
+  if (!stage) return;
+
+  // If paused or ended, controls remain visible indefinitely
+  if (!video || video.paused || video.ended) {
+    return;
+  }
+
+  // Fade out after 3 seconds of inactivity while video is PLAYING
+  mainControlsFadeTimer = setTimeout(() => {
+    hideMainPlayerControls();
+  }, 3000);
+}
+
+export function showYtBufferingSpinner() {
+  const spinner = document.getElementById('ytBufferingSpinner');
+  if (spinner) {
+    spinner.classList.remove('hidden');
+    spinner.style.opacity = '1';
+  }
+}
+
+export function hideYtBufferingSpinner() {
+  const spinner = document.getElementById('ytBufferingSpinner');
+  if (spinner) {
+    spinner.classList.add('hidden');
+    spinner.style.opacity = '0';
+  }
+}
+
+export function setupMainPlayerVideoListeners(video) {
+  if (!video || video._mainListenersAttached) return;
+  video._mainListenersAttached = true;
+
+  video.addEventListener('waiting', () => {
+    showYtBufferingSpinner();
+  });
+  video.addEventListener('playing', () => {
+    hideYtBufferingSpinner();
+    showMainPlayerControls();
+    resetMainPlayerControlsTimer();
+  });
+  video.addEventListener('canplay', () => {
+    hideYtBufferingSpinner();
+  });
+  video.addEventListener('play', () => {
+    showMainPlayerControls();
+    resetMainPlayerControlsTimer();
+  });
+  video.addEventListener('pause', () => {
+    cancelMainPlayerControlsTimer();
+    showMainPlayerControls();
+  });
+  video.addEventListener('ended', () => {
+    cancelMainPlayerControlsTimer();
+    showMainPlayerControls();
+    hideYtBufferingSpinner();
+  });
+}
+
+export function initMainPlayerControlsAutoHide() {
+  const stage = document.getElementById('ytPlayerStage');
+  const video = document.getElementById('ytVideo');
+  if (!stage) return;
+
+  if (stage._mainAutoHideInitialized) {
+    if (video) setupMainPlayerVideoListeners(video);
+    return;
+  }
+  stage._mainAutoHideInitialized = true;
+
+  const onUserActivity = () => {
+    showMainPlayerControls();
+    resetMainPlayerControlsTimer();
+  };
+
+  // Requirement: mousemove, touchstart, and mouseleave events attached to the MAIN player container
+  stage.addEventListener('mousemove', onUserActivity);
+  stage.addEventListener('pointermove', onUserActivity);
+  stage.addEventListener('pointerdown', onUserActivity);
+  stage.addEventListener('click', onUserActivity);
+  stage.addEventListener('touchstart', onUserActivity, { passive: true });
+  stage.addEventListener('touchmove', onUserActivity, { passive: true });
+
+  stage.addEventListener('mouseleave', () => {
+    const v = document.getElementById('ytVideo');
+    if (v && !v.paused && !v.ended) {
+      if (mainControlsFadeTimer) {
+        clearTimeout(mainControlsFadeTimer);
+        mainControlsFadeTimer = null;
+      }
+      hideMainPlayerControls();
+    }
+  });
+
+  if (video) {
+    setupMainPlayerVideoListeners(video);
+  }
+}
+
 // Auto-initialize listeners on DOM load
 if (typeof document !== "undefined") {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPlayerControlsAutoHide);
-  } else {
+  const initAllPlayers = () => {
     initPlayerControlsAutoHide();
+    initMainPlayerControlsAutoHide();
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAllPlayers);
+  } else {
+    initAllPlayers();
   }
 }
 
@@ -675,4 +843,13 @@ if (typeof window !== "undefined") {
   window.toggleAudioSubModal = toggleAudioSubModal;
   window.setAudioTrack = setAudioTrack;
   window.setSubtitle = setSubtitle;
+  window.areMainPlayerControlsHidden = areMainPlayerControlsHidden;
+  window.showMainPlayerControls = showMainPlayerControls;
+  window.hideMainPlayerControls = hideMainPlayerControls;
+  window.cancelMainPlayerControlsTimer = cancelMainPlayerControlsTimer;
+  window.resetMainPlayerControlsTimer = resetMainPlayerControlsTimer;
+  window.initMainPlayerControlsAutoHide = initMainPlayerControlsAutoHide;
+  window.setupMainPlayerVideoListeners = setupMainPlayerVideoListeners;
+  window.showYtBufferingSpinner = showYtBufferingSpinner;
+  window.hideYtBufferingSpinner = hideYtBufferingSpinner;
 }

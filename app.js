@@ -749,6 +749,8 @@ export function openShowPlayerPage(showKeyOrTitle, episodeIndex = 0, resumeTime 
   if (showPlayerPage) {
     showPlayerPage.classList.remove('hidden');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (window.initMainPlayerControlsAutoHide) window.initMainPlayerControlsAutoHide();
+    if (window.showMainPlayerControls) window.showMainPlayerControls();
   }
 
   const cleanTitle = cleanSeriesTitle(show.title);
@@ -813,6 +815,9 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
   }
 
   if (video) {
+    if (window.showYtBufferingSpinner) window.showYtBufferingSpinner();
+    if (window.initMainPlayerControlsAutoHide) window.initMainPlayerControlsAutoHide();
+    if (window.setupMainPlayerVideoListeners) window.setupMainPlayerVideoListeners(video);
     const targetUrl = episode.videoUrl || '';
     if (!targetUrl) {
       if (window.showToast) window.showToast("No video stream URL found for this episode.");
@@ -839,8 +844,16 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
 
     const p = video.play();
     if (p !== undefined) {
-      p.then(() => updateYtPlayIcon(true))
-       .catch(() => updateYtPlayIcon(false));
+      p.then(() => {
+        updateYtPlayIcon(true);
+        if (window.showMainPlayerControls) window.showMainPlayerControls();
+        if (window.resetMainPlayerControlsTimer) window.resetMainPlayerControlsTimer();
+      })
+       .catch(() => {
+        updateYtPlayIcon(false);
+        if (window.showMainPlayerControls) window.showMainPlayerControls();
+        if (window.hideYtBufferingSpinner) window.hideYtBufferingSpinner();
+      });
     }
 
     initYtVideoListeners();
@@ -951,6 +964,9 @@ export function switchYtEpisode(index) {
 
 export function closeShowPlayerPage() {
   pauseYtVideo();
+  if (window.cancelMainPlayerControlsTimer) window.cancelMainPlayerControlsTimer();
+  if (window.showMainPlayerControls) window.showMainPlayerControls();
+  if (window.hideYtBufferingSpinner) window.hideYtBufferingSpinner();
   const showPlayerPage = document.getElementById('showPlayerPage');
   const homeView = document.getElementById('homeView');
   const dedicatedCategoryView = document.getElementById('dedicatedCategoryView');
@@ -1005,6 +1021,8 @@ function initYtVideoListeners() {
 
   video.onpause = () => {
     updateYtPlayIcon(false);
+    if (window.cancelMainPlayerControlsTimer) window.cancelMainPlayerControlsTimer();
+    if (window.showMainPlayerControls) window.showMainPlayerControls();
     if (typeof window.saveContinueWatchingProgress === 'function') {
       window.saveContinueWatchingProgress(video.currentTime, video.duration);
     }
@@ -1012,10 +1030,14 @@ function initYtVideoListeners() {
 
   video.onplay = () => {
     updateYtPlayIcon(true);
+    if (window.showMainPlayerControls) window.showMainPlayerControls();
+    if (window.resetMainPlayerControlsTimer) window.resetMainPlayerControlsTimer();
   };
 
   video.onended = () => {
     updateYtPlayIcon(false);
+    if (window.cancelMainPlayerControlsTimer) window.cancelMainPlayerControlsTimer();
+    if (window.showMainPlayerControls) window.showMainPlayerControls();
     if (typeof window.saveContinueWatchingProgress === 'function') {
       window.saveContinueWatchingProgress(video.currentTime, video.duration);
     }
@@ -1032,9 +1054,13 @@ export function toggleYtPlay() {
   if (video.paused) {
     video.play();
     updateYtPlayIcon(true);
+    if (window.showMainPlayerControls) window.showMainPlayerControls();
+    if (window.resetMainPlayerControlsTimer) window.resetMainPlayerControlsTimer();
   } else {
     video.pause();
     updateYtPlayIcon(false);
+    if (window.cancelMainPlayerControlsTimer) window.cancelMainPlayerControlsTimer();
+    if (window.showMainPlayerControls) window.showMainPlayerControls();
   }
 }
 
@@ -1084,11 +1110,18 @@ export function triggerYtSkipAnimation(seconds) {
 }
 
 export function handleYtPlayerTap(e) {
-  if (e.target.closest('button, input, select, a, #ytScrubContainer, #ytControlsOverlay .space-y-3, #ytControlsOverlay .flex-items-center')) {
+  if (e.target.closest('button, input, select, a, #ytScrubContainer, #main-player-ui-wrapper .space-y-3, #main-player-ui-wrapper .pointer-events-auto, #ytControlsOverlay')) {
     return;
   }
   const stage = document.getElementById('ytPlayerStage');
   if (!stage) return;
+
+  // If controls were currently hidden and video is playing, first tap reveals controls instead of toggling play
+  if (typeof window.areMainPlayerControlsHidden === 'function' && window.areMainPlayerControlsHidden()) {
+    if (window.showMainPlayerControls) window.showMainPlayerControls();
+    if (window.resetMainPlayerControlsTimer) window.resetMainPlayerControlsTimer();
+    return;
+  }
 
   const now = Date.now();
   const tapDelay = now - ytLastTapTime;

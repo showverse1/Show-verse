@@ -62,6 +62,51 @@
   cursor: none !important;
 }
 
+/* Master Main Video Player UI Controls Wrapper (Public / Series Player) */
+#main-player-ui-wrapper {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  will-change: opacity;
+  opacity: 1;
+}
+
+#main-player-ui-wrapper > * {
+  pointer-events: auto;
+}
+
+/* Strict Auto-hide overlay state during main video playback (3s inactivity) */
+#main-player-ui-wrapper.controls-hidden,
+#ytPlayerStage.controls-hidden #main-player-ui-wrapper {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+#main-player-ui-wrapper.controls-hidden > *,
+#ytPlayerStage.controls-hidden #main-player-ui-wrapper > * {
+  pointer-events: none !important;
+}
+
+#ytPlayerStage.controls-hidden,
+#ytPlayerStage.controls-hidden #ytVideo {
+  cursor: none !important;
+}
+
+/* Centered Buffering Indicator for Main Player */
+#ytBufferingSpinner {
+  z-index: 25;
+  transition: opacity 0.2s ease;
+}
+
+#ytBufferingSpinner.hidden {
+  display: none !important;
+}
+
 #playerStageContainer {
   z-index: 20;
 }

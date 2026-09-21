@@ -440,6 +440,17 @@
           <track id="ytSubtitleTrack" kind="subtitles" srclang="en" label="English CC" default>
         </video>
         
+        <!-- Centered Buffering Indicator (Loading Spinner) for Main Player -->
+        <div id="ytBufferingSpinner" class="hidden absolute inset-0 z-25 flex items-center justify-center bg-black/45 backdrop-blur-[2px] transition-opacity duration-200 pointer-events-none">
+          <div class="flex flex-col items-center gap-3">
+            <div class="relative flex items-center justify-center">
+              <div class="w-14 h-14 md:w-16 md:h-16 rounded-full border-4 border-brand-cyan/20 animate-ping absolute"></div>
+              <div class="w-10 h-10 md:w-12 md:h-12 rounded-full border-3 md:border-4 border-white/20 border-t-brand-cyan animate-spin shadow-neon-cyan"></div>
+            </div>
+            <span class="text-xs md:text-sm font-semibold tracking-widest text-brand-cyan uppercase font-mono drop-shadow">Buffering...</span>
+          </div>
+        </div>
+
         <!-- Double-Tap Indicators -->
         <div id="ytSkipLeftIndicator" class="skip-indicator-overlay skip-left">
           <div class="skip-indicator-pill">
@@ -454,9 +465,9 @@
           </div>
         </div>
 
-        <!-- Video Player Overlay Controls -->
-        <div id="ytControlsOverlay" class="absolute inset-0 flex flex-col justify-between p-4 md:p-6 bg-gradient-to-t from-black/95 via-transparent to-black/80 opacity-100 transition-opacity duration-300">
-          <div class="flex items-center justify-between">
+        <!-- MASTER MAIN PLAYER UI CONTROLS WRAPPER (Auto-Hide Controls) -->
+        <div id="main-player-ui-wrapper" class="absolute inset-0 z-30 flex flex-col justify-between p-4 md:p-6 bg-gradient-to-t from-black/95 via-transparent to-black/80 opacity-100 transition-opacity duration-300 pointer-events-none">
+          <div id="mainPlayerTopBar" class="pointer-events-auto flex items-center justify-between">
             <div class="flex items-center gap-2">
               <span id="ytBadgeQuality" class="px-2.5 py-0.5 rounded-full bg-brand-cyan/20 border border-brand-cyan/40 text-brand-cyan text-[10px] font-black uppercase">
                 1080P MASTER
@@ -475,7 +486,7 @@
             </div>
           </div>
 
-          <div class="space-y-3">
+          <div id="mainPlayerBottomBar" class="pointer-events-auto space-y-3">
             <div class="flex items-center gap-3">
               <span id="ytTimeDisplay" class="text-xs font-mono text-slate-300 w-24">00:00 / 00:00</span>
               <div id="ytScrubContainer" onclick="seekYtVideo(event)" class="relative flex-1 h-3 flex items-center cursor-pointer group/bar">
