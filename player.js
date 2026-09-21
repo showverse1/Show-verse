@@ -15,7 +15,9 @@ const FALLBACK_STREAM = 'https://vjs.zencdn.net/v/oceans.mp4';
 function getElements() {
   return {
     modal: document.getElementById('playerModal'),
+    uiWrapper: document.getElementById('player-ui-wrapper'),
     video: document.getElementById('mainVideo'),
+    bufferingSpinner: document.getElementById('playerBufferingSpinner'),
     stage: document.getElementById('playerStage'),
     stageContainer: document.getElementById('playerStageContainer'),
     topBar: document.getElementById('playerTopBar'),
@@ -36,26 +38,60 @@ function getElements() {
 }
 
 // ========================================================
-// 0. AUTO-HIDE CONTROLS OVERLAY ENGINE (3s Inactivity)
+// 0. BUFFERING INDICATOR & AUTO-HIDE CONTROLS ENGINE
 // ========================================================
 
+/**
+ * Show the modern centered buffering spinner overlay
+ */
+export function showBufferingSpinner() {
+  const spinner = document.getElementById('playerBufferingSpinner');
+  if (spinner) {
+    spinner.classList.remove('hidden');
+    spinner.style.opacity = '1';
+  }
+}
+
+/**
+ * Hide the modern centered buffering spinner overlay
+ */
+export function hideBufferingSpinner() {
+  const spinner = document.getElementById('playerBufferingSpinner');
+  if (spinner) {
+    spinner.classList.add('hidden');
+    spinner.style.opacity = '0';
+  }
+}
+
 export function areControlsHidden() {
-  const { modal } = getElements();
+  const uiWrapper = document.getElementById('player-ui-wrapper');
+  const modal = document.getElementById('playerModal');
+  if (uiWrapper) {
+    return uiWrapper.classList.contains('controls-hidden') || uiWrapper.style.opacity === '0';
+  }
   return modal ? modal.classList.contains('controls-hidden') : false;
 }
 
 export function showControls() {
-  const { modal } = getElements();
+  const uiWrapper = document.getElementById('player-ui-wrapper');
+  const modal = document.getElementById('playerModal');
+  if (uiWrapper) {
+    uiWrapper.style.opacity = '1';
+    uiWrapper.style.pointerEvents = 'auto';
+    uiWrapper.classList.remove('controls-hidden');
+  }
   if (modal) {
     modal.classList.remove('controls-hidden');
   }
 }
 
 export function hideControls() {
-  const { modal, video, qualityModal, audioSubModal } = getElements();
+  const { video, qualityModal, audioSubModal } = getElements();
+  const uiWrapper = document.getElementById('player-ui-wrapper');
+  const modal = document.getElementById('playerModal');
   if (!modal || isLocked) return;
 
-  // Requirement 3: If video is paused or ended, controls MUST remain permanently visible
+  // Requirement: If video is paused or ended, controls MUST remain permanently visible
   if (!video || video.paused || video.ended) {
     showControls();
     return;
@@ -68,7 +104,14 @@ export function hideControls() {
     return;
   }
 
-  modal.classList.add('controls-hidden');
+  if (uiWrapper) {
+    uiWrapper.style.opacity = '0';
+    uiWrapper.style.pointerEvents = 'none';
+    uiWrapper.classList.add('controls-hidden');
+  }
+  if (modal) {
+    modal.classList.add('controls-hidden');
+  }
 }
 
 export function cancelControlsTimer() {
@@ -90,15 +133,53 @@ export function resetControlsTimer() {
   const { modal, video } = getElements();
   if (!modal || modal.classList.contains('hidden') || isLocked) return;
 
-  // Requirement 3: If paused, controls remain visible indefinitely
+  // Requirement: If paused or ended, controls remain visible indefinitely
   if (!video || video.paused || video.ended) {
     return;
   }
 
-  // Requirement 1: Fade out after 3 seconds of inactivity while video is PLAYING
+  // Requirement: Fade out after 3 seconds of inactivity while video is PLAYING
   controlsFadeTimer = setTimeout(() => {
     hideControls();
   }, 3000);
+}
+
+/**
+ * Attach buffering and playback listeners to video element
+ */
+export function setupVideoListeners(video) {
+  if (!video || video._bufferingListenersAttached) return;
+  video._bufferingListenersAttached = true;
+
+  // 1. Buffering indicator events:
+  // Show spinner on waiting
+  video.addEventListener('waiting', () => {
+    showBufferingSpinner();
+  });
+  // Hide spinner on playing & canplay
+  video.addEventListener('playing', () => {
+    hideBufferingSpinner();
+    showControls();
+    resetControlsTimer();
+  });
+  video.addEventListener('canplay', () => {
+    hideBufferingSpinner();
+  });
+
+  // 2. Playback state events:
+  video.addEventListener('play', () => {
+    showControls();
+    resetControlsTimer();
+  });
+  video.addEventListener('pause', () => {
+    cancelControlsTimer();
+    showControls();
+  });
+  video.addEventListener('ended', () => {
+    cancelControlsTimer();
+    showControls();
+    hideBufferingSpinner();
+  });
 }
 
 export function initPlayerControlsAutoHide() {
@@ -110,10 +191,11 @@ export function initPlayerControlsAutoHide() {
   modal._autoHideInitialized = true;
 
   const onUserActivity = () => {
+    showControls();
     resetControlsTimer();
   };
 
-  // Requirement 2: Mouse movement, clicks, touches immediately reset timer and reveal controls
+  // Requirement: Mouse movement, touch, clicks immediately reset timer and reveal controls
   modal.addEventListener('mousemove', onUserActivity);
   modal.addEventListener('pointermove', onUserActivity);
   modal.addEventListener('pointerdown', onUserActivity);
@@ -121,23 +203,20 @@ export function initPlayerControlsAutoHide() {
   modal.addEventListener('touchstart', onUserActivity, { passive: true });
   modal.addEventListener('touchmove', onUserActivity, { passive: true });
 
+  // Requirement: If the mouse leaves the player area (mouseleave), hide controls immediately if video is playing
+  modal.addEventListener('mouseleave', () => {
+    const v = document.getElementById('mainVideo');
+    if (v && !v.paused && !v.ended && !isLocked) {
+      if (controlsFadeTimer) {
+        clearTimeout(controlsFadeTimer);
+        controlsFadeTimer = null;
+      }
+      hideControls();
+    }
+  });
+
   if (video) {
-    video.addEventListener('play', () => {
-      showControls();
-      resetControlsTimer();
-    });
-    video.addEventListener('playing', () => {
-      showControls();
-      resetControlsTimer();
-    });
-    video.addEventListener('pause', () => {
-      cancelControlsTimer();
-      showControls();
-    });
-    video.addEventListener('ended', () => {
-      cancelControlsTimer();
-      showControls();
-    });
+    setupVideoListeners(video);
   }
 }
 
@@ -239,7 +318,12 @@ if (typeof document !== "undefined") {
 export function toggleLockScreen() {
   isLocked = true;
   cancelControlsTimer();
-  const { topBar, bottomBar, qualityModal, audioSubModal } = getElements();
+  const { uiWrapper, topBar, bottomBar, qualityModal, audioSubModal } = getElements();
+  if (uiWrapper) {
+    uiWrapper.style.opacity = '0';
+    uiWrapper.style.pointerEvents = 'none';
+    uiWrapper.classList.add('hidden');
+  }
   if (topBar) topBar.classList.add('hidden');
   if (bottomBar) bottomBar.classList.add('hidden');
   if (qualityModal) qualityModal.classList.add('hidden');
@@ -267,10 +351,13 @@ export function unlockScreen(e) {
     clearTimeout(unlockFadeTimer);
     unlockFadeTimer = null;
   }
-  const { topBar, bottomBar, smallUnlockBtn, video } = getElements();
+  const { uiWrapper, topBar, bottomBar, smallUnlockBtn, video } = getElements();
   if (smallUnlockBtn) {
     smallUnlockBtn.classList.remove('opacity-100', 'pointer-events-auto');
     smallUnlockBtn.classList.add('opacity-0', 'pointer-events-none');
+  }
+  if (uiWrapper) {
+    uiWrapper.classList.remove('hidden');
   }
   if (topBar) topBar.classList.remove('hidden');
   if (bottomBar) bottomBar.classList.remove('hidden');
@@ -561,6 +648,9 @@ export function setSubtitle(sub) {
 
 // Expose globally on window for inline HTML onclick handlers
 if (typeof window !== "undefined") {
+  window.showBufferingSpinner = showBufferingSpinner;
+  window.hideBufferingSpinner = hideBufferingSpinner;
+  window.setupVideoListeners = setupVideoListeners;
   window.areControlsHidden = areControlsHidden;
   window.showControls = showControls;
   window.hideControls = hideControls;

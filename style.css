@@ -8,43 +8,72 @@
   transition: cursor 0.2s ease;
 }
 
+/* Master Player UI Controls Wrapper - wraps top badges, timeline, and bottom controls bar */
+#player-ui-wrapper {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+  will-change: opacity;
+  opacity: 1;
+}
+
+#player-ui-wrapper > * {
+  pointer-events: auto;
+}
+
 #playerTopBar {
   z-index: 40;
   position: relative;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s ease, transform 0.3s ease;
   will-change: opacity, transform;
 }
 
 #playerBottomBar {
   z-index: 40;
   position: relative;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.3s ease, transform 0.3s ease;
   will-change: opacity, transform;
 }
 
-/* Auto-hide overlay state during video playback */
-#playerModal.controls-hidden #playerTopBar {
+/* Strict Auto-hide overlay state during video playback (3s inactivity) */
+#player-ui-wrapper.controls-hidden,
+#playerModal.controls-hidden #player-ui-wrapper {
   opacity: 0 !important;
   pointer-events: none !important;
-  transform: translateY(-10px);
 }
 
-#playerModal.controls-hidden #playerBottomBar {
-  opacity: 0 !important;
+#player-ui-wrapper.controls-hidden > *,
+#playerModal.controls-hidden #player-ui-wrapper > * {
   pointer-events: none !important;
-  transform: translateY(10px);
 }
 
 #playerModal.controls-hidden {
   cursor: none !important;
 }
 
-#playerModal.controls-hidden #playerStageContainer {
+#playerModal.controls-hidden #playerStageContainer,
+#playerModal.controls-hidden #playerStage,
+#playerModal.controls-hidden #mainVideo {
   cursor: none !important;
 }
 
 #playerStageContainer {
   z-index: 20;
+}
+
+/* Centered Buffering Indicator (Loading Spinner) Overlay */
+#playerBufferingSpinner {
+  z-index: 35;
+  transition: opacity 0.2s ease;
+}
+
+#playerBufferingSpinner.hidden {
+  display: none !important;
 }
 
 /* Small Unlock Button Quietly on the Corner */

@@ -301,8 +301,13 @@ export function playMedia(title, url, resumeTime = 0, meta = {}) {
     if (saved && saved.currentTime > 2) seekTo = saved.currentTime;
   }
 
+  if (window.showBufferingSpinner) window.showBufferingSpinner();
   mainVid.src = targetUrl;
   mainVid.load();
+
+  if (window.setupVideoListeners) {
+    window.setupVideoListeners(mainVid);
+  }
 
   const applyResume = () => {
     if (seekTo > 0 && Number.isFinite(seekTo) && mainVid.duration && seekTo < mainVid.duration) {
@@ -318,6 +323,7 @@ export function playMedia(title, url, resumeTime = 0, meta = {}) {
   }).catch(() => {
     if (window.updatePlayIcon) window.updatePlayIcon(false);
     if (window.showControls) window.showControls();
+    if (window.hideBufferingSpinner) window.hideBufferingSpinner();
   });
 
   initVideoListeners(mainVid);
@@ -330,6 +336,7 @@ export function closePlayer() {
     saveContinueWatchingProgress(mainVid.currentTime, mainVid.duration);
     mainVid.pause();
   }
+  if (window.hideBufferingSpinner) window.hideBufferingSpinner();
   if (window.cancelControlsTimer) window.cancelControlsTimer();
   if (window.showControls) window.showControls();
   if (document.fullscreenElement || document.webkitFullscreenElement) {
