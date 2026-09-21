@@ -36,6 +36,121 @@ function getElements() {
 }
 
 // ========================================================
+// 0. AUTO-HIDE CONTROLS OVERLAY ENGINE (3s Inactivity)
+// ========================================================
+
+export function areControlsHidden() {
+  const { modal } = getElements();
+  return modal ? modal.classList.contains('controls-hidden') : false;
+}
+
+export function showControls() {
+  const { modal } = getElements();
+  if (modal) {
+    modal.classList.remove('controls-hidden');
+  }
+}
+
+export function hideControls() {
+  const { modal, video, qualityModal, audioSubModal } = getElements();
+  if (!modal || isLocked) return;
+
+  // Requirement 3: If video is paused or ended, controls MUST remain permanently visible
+  if (!video || video.paused || video.ended) {
+    showControls();
+    return;
+  }
+
+  // Do not hide controls if either configuration modal is currently open
+  const isQualityOpen = qualityModal && !qualityModal.classList.contains('hidden');
+  const isAudioSubOpen = audioSubModal && !audioSubModal.classList.contains('hidden');
+  if (isQualityOpen || isAudioSubOpen) {
+    return;
+  }
+
+  modal.classList.add('controls-hidden');
+}
+
+export function cancelControlsTimer() {
+  if (controlsFadeTimer) {
+    clearTimeout(controlsFadeTimer);
+    controlsFadeTimer = null;
+  }
+  showControls();
+}
+
+export function resetControlsTimer() {
+  if (controlsFadeTimer) {
+    clearTimeout(controlsFadeTimer);
+    controlsFadeTimer = null;
+  }
+
+  showControls();
+
+  const { modal, video } = getElements();
+  if (!modal || modal.classList.contains('hidden') || isLocked) return;
+
+  // Requirement 3: If paused, controls remain visible indefinitely
+  if (!video || video.paused || video.ended) {
+    return;
+  }
+
+  // Requirement 1: Fade out after 3 seconds of inactivity while video is PLAYING
+  controlsFadeTimer = setTimeout(() => {
+    hideControls();
+  }, 3000);
+}
+
+export function initPlayerControlsAutoHide() {
+  const modal = document.getElementById('playerModal');
+  const video = document.getElementById('mainVideo');
+  if (!modal) return;
+
+  if (modal._autoHideInitialized) return;
+  modal._autoHideInitialized = true;
+
+  const onUserActivity = () => {
+    resetControlsTimer();
+  };
+
+  // Requirement 2: Mouse movement, clicks, touches immediately reset timer and reveal controls
+  modal.addEventListener('mousemove', onUserActivity);
+  modal.addEventListener('pointermove', onUserActivity);
+  modal.addEventListener('pointerdown', onUserActivity);
+  modal.addEventListener('click', onUserActivity);
+  modal.addEventListener('touchstart', onUserActivity, { passive: true });
+  modal.addEventListener('touchmove', onUserActivity, { passive: true });
+
+  if (video) {
+    video.addEventListener('play', () => {
+      showControls();
+      resetControlsTimer();
+    });
+    video.addEventListener('playing', () => {
+      showControls();
+      resetControlsTimer();
+    });
+    video.addEventListener('pause', () => {
+      cancelControlsTimer();
+      showControls();
+    });
+    video.addEventListener('ended', () => {
+      cancelControlsTimer();
+      showControls();
+    });
+  }
+}
+
+// Auto-initialize listeners on DOM load
+if (typeof document !== "undefined") {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPlayerControlsAutoHide);
+  } else {
+    initPlayerControlsAutoHide();
+  }
+}
+
+// ========================================================
 // 1. FULLSCREEN & LANDSCAPE CONTROLS ENGINE
 // ========================================================
 
@@ -123,6 +238,7 @@ if (typeof document !== "undefined") {
  */
 export function toggleLockScreen() {
   isLocked = true;
+  cancelControlsTimer();
   const { topBar, bottomBar, qualityModal, audioSubModal } = getElements();
   if (topBar) topBar.classList.add('hidden');
   if (bottomBar) bottomBar.classList.add('hidden');
@@ -151,13 +267,18 @@ export function unlockScreen(e) {
     clearTimeout(unlockFadeTimer);
     unlockFadeTimer = null;
   }
-  const { topBar, bottomBar, smallUnlockBtn } = getElements();
+  const { topBar, bottomBar, smallUnlockBtn, video } = getElements();
   if (smallUnlockBtn) {
     smallUnlockBtn.classList.remove('opacity-100', 'pointer-events-auto');
     smallUnlockBtn.classList.add('opacity-0', 'pointer-events-none');
   }
   if (topBar) topBar.classList.remove('hidden');
   if (bottomBar) bottomBar.classList.remove('hidden');
+
+  showControls();
+  if (video && !video.paused) {
+    resetControlsTimer();
+  }
 
   if (window.showToast) {
     window.showToast("Screen Unlocked");
@@ -216,12 +337,14 @@ export function triggerPlayerSkipAnimation(seconds) {
 /**
  * Handle taps on the screen / stage:
  * - If locked: only fade in/out the small unlock icon for 3 seconds
+ * - If controls are hidden: reveal controls instantly and reset 3s timer
  * - Unlocked: Double-tap on left/right half triggers smooth +/-10s skip animation
  * - Single tap: toggles play/pause
  */
 export function handlePlayerScreenTap(e) {
   // Ignore clicks on buttons, inputs, links, or scrub progress bar
   if (e.target.closest('button, input, select, a, #scrubContainer, #smallUnlockBtn, .glass-card, #playerTopBar, #playerBottomBar')) {
+    resetControlsTimer();
     return;
   }
 
@@ -229,6 +352,12 @@ export function handlePlayerScreenTap(e) {
     e.preventDefault();
     e.stopPropagation();
     showSmallUnlockBriefly();
+    return;
+  }
+
+  // If controls were hidden, tap/click reveals them instantly and resets the 3-second timer
+  if (areControlsHidden()) {
+    resetControlsTimer();
     return;
   }
 
@@ -255,6 +384,7 @@ export function handlePlayerScreenTap(e) {
       // Center double tap toggles play
       togglePlay();
     }
+    resetControlsTimer();
   } else {
     // Potential single tap
     lastTapTime = now;
@@ -263,6 +393,7 @@ export function handlePlayerScreenTap(e) {
     singleTapTimeout = setTimeout(() => {
       togglePlay();
       singleTapTimeout = null;
+      resetControlsTimer();
     }, 280);
   }
 }
@@ -277,9 +408,12 @@ export function togglePlay() {
   if (video.paused) {
     video.play();
     updatePlayIcon(true);
+    resetControlsTimer();
   } else {
     video.pause();
     updatePlayIcon(false);
+    cancelControlsTimer();
+    showControls();
   }
 }
 
@@ -304,6 +438,7 @@ export function skipTime(seconds) {
   }
   // Trigger in-player frame skip animation overlay
   triggerPlayerSkipAnimation(seconds);
+  resetControlsTimer();
 }
 
 export function seekVideo(e) {
@@ -319,6 +454,7 @@ export function seekVideo(e) {
   if (window.saveContinueWatchingProgress) {
     window.saveContinueWatchingProgress(targetTime, duration);
   }
+  resetControlsTimer();
 }
 
 export function changeVolume(val) {
@@ -329,6 +465,7 @@ export function changeVolume(val) {
     volumeIcon.setAttribute('data-lucide', Number(val) === 0 ? 'volume-x' : 'volume-2');
     if (window.lucide) window.lucide.createIcons();
   }
+  resetControlsTimer();
 }
 
 export function toggleMute() {
@@ -337,6 +474,7 @@ export function toggleMute() {
   video.muted = !video.muted;
   changeVolume(video.muted ? 0 : 1);
   if (volumeSlider) volumeSlider.value = video.muted ? 0 : 1;
+  resetControlsTimer();
 }
 
 export function toggleAmbientLighting() {
@@ -354,6 +492,7 @@ export function toggleAmbientLighting() {
   if (window.showToast) {
     window.showToast(`Ambient Lighting: ${isAmbientOn ? 'ENABLED' : 'DISABLED'}`);
   }
+  resetControlsTimer();
 }
 
 export function togglePiP() {
@@ -368,40 +507,66 @@ export function togglePiP() {
   } catch (err) {
     if (window.showToast) window.showToast("PiP not supported on this browser");
   }
+  resetControlsTimer();
 }
 
 export function toggleQualityModal() {
-  const { qualityModal } = getElements();
-  if (qualityModal) qualityModal.classList.toggle('hidden');
+  const { qualityModal, video } = getElements();
+  if (qualityModal) {
+    const isHidden = qualityModal.classList.toggle('hidden');
+    if (!isHidden) {
+      cancelControlsTimer();
+      showControls();
+    } else {
+      if (video && !video.paused) resetControlsTimer();
+    }
+  }
 }
 
 export function selectQuality(q) {
   const badge = document.getElementById('currentQualityBadge');
   if (badge) badge.innerText = q.split(' ')[0];
-  const { qualityModal } = getElements();
+  const { qualityModal, video } = getElements();
   if (qualityModal) qualityModal.classList.add('hidden');
   if (window.showToast) window.showToast(`Stream quality: ${q}`);
+  if (video && !video.paused) resetControlsTimer();
 }
 
 export function toggleAudioSubModal() {
-  const { audioSubModal } = getElements();
-  if (audioSubModal) audioSubModal.classList.toggle('hidden');
+  const { audioSubModal, video } = getElements();
+  if (audioSubModal) {
+    const isHidden = audioSubModal.classList.toggle('hidden');
+    if (!isHidden) {
+      cancelControlsTimer();
+      showControls();
+    } else {
+      if (video && !video.paused) resetControlsTimer();
+    }
+  }
 }
 
 export function setAudioTrack(track) {
   if (window.showToast) window.showToast(`Audio Track: ${track}`);
-  const { audioSubModal } = getElements();
+  const { audioSubModal, video } = getElements();
   if (audioSubModal) audioSubModal.classList.add('hidden');
+  if (video && !video.paused) resetControlsTimer();
 }
 
 export function setSubtitle(sub) {
   if (window.showToast) window.showToast(`Subtitles: ${sub}`);
-  const { audioSubModal } = getElements();
+  const { audioSubModal, video } = getElements();
   if (audioSubModal) audioSubModal.classList.add('hidden');
+  if (video && !video.paused) resetControlsTimer();
 }
 
 // Expose globally on window for inline HTML onclick handlers
 if (typeof window !== "undefined") {
+  window.areControlsHidden = areControlsHidden;
+  window.showControls = showControls;
+  window.hideControls = hideControls;
+  window.resetControlsTimer = resetControlsTimer;
+  window.cancelControlsTimer = cancelControlsTimer;
+  window.initPlayerControlsAutoHide = initPlayerControlsAutoHide;
   window.toggleFullscreen = toggleFullscreen;
   window.toggleLockScreen = toggleLockScreen;
   window.unlockScreen = unlockScreen;

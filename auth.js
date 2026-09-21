@@ -2,13 +2,9 @@
 import { auth } from "./firebase.js";
 import { 
   onAuthStateChanged, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
   signOut,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  RecaptchaVerifier,
-  signInWithPhoneNumber
+  createUserWithEmailAndPassword
 } from "firebase/auth";
 
 // STRICT ADMIN EMAIL: Only this exact email is granted Creator Studio / Admin permissions
@@ -16,10 +12,6 @@ export const SECRET_ADMIN_EMAIL = 'vimleshkumar901559@gmail.com';
 
 // Currently authenticated user (null by default = Guest state)
 export let currentUser = null;
-
-// Stored confirmation result & reCAPTCHA verifier for Phone Auth
-let confirmationResult = null;
-let recaptchaVerifier = null;
 
 export function getCurrentUser() {
   return currentUser;
@@ -78,9 +70,9 @@ export function updateAuthUI(user) {
 
   if (user) {
     // ---------------- AUTHENTICATED STATE ----------------
-    const displayName = user.displayName || (user.email ? user.email.split('@')[0] : (user.phoneNumber || 'User'));
-    const displaySub = user.email || user.phoneNumber || '';
-    const initial = (user.displayName || user.email || user.phoneNumber || 'U').replace('+', '')[0].toUpperCase();
+    const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'User');
+    const displaySub = user.email || '';
+    const initial = (user.displayName || user.email || 'U')[0].toUpperCase();
 
     // 1. Navbar displays user info
     if (navUsername) {
@@ -218,54 +210,16 @@ export function updateAuthUI(user) {
       meUserAuthPanel.classList.add('hidden');
     }
 
-    // Reset guest inputs & hide OTP container
+    // Reset guest inputs
     const emailInput = document.getElementById('authEmailInput');
     const passwordInput = document.getElementById('authPasswordInput');
-    const phoneInput = document.getElementById('authPhoneInput');
-    const otpInput = document.getElementById('authOtpInput');
-    const otpContainer = document.getElementById('otpInputContainer');
-    const sendOtpBtn = document.getElementById('sendOtpBtn');
 
     if (emailInput) emailInput.value = '';
     if (passwordInput) passwordInput.value = '';
-    if (phoneInput) phoneInput.value = '';
-    if (otpInput) otpInput.value = '';
-    if (otpContainer) {
-      otpContainer.style.display = 'none';
-      otpContainer.classList.add('hidden');
-    }
-    if (sendOtpBtn) {
-      sendOtpBtn.innerText = 'Send OTP';
-    }
   }
 
   if (window.lucide && typeof window.lucide.createIcons === 'function') {
     window.lucide.createIcons();
-  }
-}
-
-/**
- * Triggers Google Sign In popup with Firebase Authentication
- */
-export async function triggerGoogleSignIn() {
-  if (!auth) {
-    if (window.showToast) window.showToast("Firebase Authentication is not available.");
-    return;
-  }
-  try {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    const result = await signInWithPopup(auth, provider);
-    currentUser = result.user;
-    updateAuthUI(currentUser);
-    if (window.showToast) {
-      window.showToast(`Signed in as ${currentUser.displayName || currentUser.email}`);
-    }
-  } catch (error) {
-    console.error("Google sign in error:", error);
-    if (error && error.code !== 'auth/popup-closed-by-user' && window.showToast) {
-      window.showToast(error.message || "Failed to sign in with Google.");
-    }
   }
 }
 
@@ -374,155 +328,6 @@ export async function handleEmailSignUp() {
 }
 
 /**
- * Helper to initialize or retrieve reCAPTCHA verifier for Phone Auth
- */
-function getOrInitRecaptcha() {
-  if (!auth) throw new Error("Firebase Authentication is not available.");
-  
-  if (!recaptchaVerifier) {
-    recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-      size: 'invisible',
-      callback: () => {
-        // reCAPTCHA solved
-      },
-      'expired-callback': () => {
-        if (window.showToast) window.showToast("reCAPTCHA verification expired. Please send OTP again.");
-      }
-    });
-  }
-  return recaptchaVerifier;
-}
-
-/**
- * Sends SMS OTP to the provided phone number
- */
-export async function handleSendOtp() {
-  const phoneInput = document.getElementById('authPhoneInput');
-  let phoneNumber = phoneInput ? phoneInput.value.trim() : '';
-
-  if (!phoneNumber) {
-    if (window.showToast) window.showToast("Please enter a phone number with country code (e.g. +91 9876543210).");
-    return;
-  }
-
-  // Ensure country code prefix '+'
-  if (!phoneNumber.startsWith('+')) {
-    phoneNumber = '+' + phoneNumber;
-    if (phoneInput) phoneInput.value = phoneNumber;
-  }
-
-  if (!auth) {
-    if (window.showToast) window.showToast("Firebase Authentication is not available.");
-    return;
-  }
-
-  const sendOtpBtn = document.getElementById('sendOtpBtn');
-  const origText = sendOtpBtn ? sendOtpBtn.innerText : '';
-  if (sendOtpBtn) {
-    sendOtpBtn.innerText = "Sending...";
-    sendOtpBtn.disabled = true;
-  }
-
-  try {
-    const verifier = getOrInitRecaptcha();
-    confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, verifier);
-    window.confirmationResult = confirmationResult;
-
-    const otpContainer = document.getElementById('otpInputContainer');
-    if (otpContainer) {
-      otpContainer.style.display = 'block';
-      otpContainer.classList.remove('hidden');
-    }
-
-    const authOtpInput = document.getElementById('authOtpInput');
-    if (authOtpInput) {
-      authOtpInput.focus();
-    }
-
-    if (sendOtpBtn) {
-      sendOtpBtn.innerText = "Resend OTP";
-    }
-
-    if (window.showToast) {
-      window.showToast(`Verification code sent to ${phoneNumber}!`);
-    }
-  } catch (error) {
-    console.error("Error sending OTP:", error);
-    if (recaptchaVerifier) {
-      try {
-        recaptchaVerifier.clear();
-      } catch (_) {}
-      recaptchaVerifier = null;
-    }
-    let msg = error.message || "Failed to send SMS code.";
-    if (error.code === 'auth/invalid-phone-number') {
-      msg = "Invalid phone number format. Please include country code (e.g. +91 9876543210).";
-    } else if (error.code === 'auth/quota-exceeded') {
-      msg = "SMS quota exceeded. Please try again later or use Google / Email sign in.";
-    } else if (error.code === 'auth/too-many-requests') {
-      msg = "Too many requests. Please wait a moment and try again.";
-    }
-    if (window.showToast) window.showToast(msg);
-  } finally {
-    if (sendOtpBtn) {
-      if (sendOtpBtn.innerText === "Sending...") {
-        sendOtpBtn.innerText = origText || "Send OTP";
-      }
-      sendOtpBtn.disabled = false;
-    }
-  }
-}
-
-/**
- * Verifies SMS OTP code and completes Phone Authentication
- */
-export async function handleVerifyOtp() {
-  const otpInput = document.getElementById('authOtpInput');
-  const code = otpInput ? otpInput.value.trim() : '';
-
-  if (!code) {
-    if (window.showToast) window.showToast("Please enter the 6-digit verification code.");
-    return;
-  }
-
-  const verifier = confirmationResult || window.confirmationResult;
-  if (!verifier) {
-    if (window.showToast) window.showToast("No pending OTP request. Please request OTP first.");
-    return;
-  }
-
-  const verifyBtn = document.getElementById('verifyOtpBtn');
-  const origText = verifyBtn ? verifyBtn.innerText : '';
-  if (verifyBtn) {
-    verifyBtn.innerText = "Verifying...";
-    verifyBtn.disabled = true;
-  }
-
-  try {
-    const result = await verifier.confirm(code);
-    currentUser = result.user;
-    updateAuthUI(currentUser);
-    if (window.showToast) {
-      window.showToast(`Phone verified successfully! Logged in as ${currentUser.phoneNumber || 'User'}`);
-    }
-  } catch (error) {
-    console.error("Error verifying OTP:", error);
-    let msg = error.message || "Invalid OTP code.";
-    if (error.code === 'auth/invalid-verification-code') {
-      msg = "Incorrect OTP code. Please check and try again.";
-    } else if (error.code === 'auth/code-expired') {
-      msg = "Verification code has expired. Please request a new OTP.";
-    }
-    if (window.showToast) window.showToast(msg);
-  } finally {
-    if (verifyBtn) {
-      verifyBtn.innerText = origText || "Verify OTP";
-      verifyBtn.disabled = false;
-    }
-  }
-}
-
-/**
  * Properly signs out from Firebase, clearing state and reverting immediately to default Guest UI
  */
 export async function handleSignOut() {
@@ -534,14 +339,6 @@ export async function handleSignOut() {
     }
   }
   currentUser = null;
-  confirmationResult = null;
-  window.confirmationResult = null;
-  if (recaptchaVerifier) {
-    try {
-      recaptchaVerifier.clear();
-    } catch (_) {}
-    recaptchaVerifier = null;
-  }
   updateAuthUI(null);
 
   // If Creator Studio was open, immediately close it
@@ -594,11 +391,8 @@ if (auth) {
 
 // Export to window for HTML onclick bindings
 if (typeof window !== "undefined") {
-  window.triggerGoogleSignIn = triggerGoogleSignIn;
   window.handleEmailLogin = handleEmailLogin;
   window.handleEmailSignUp = handleEmailSignUp;
-  window.handleSendOtp = handleSendOtp;
-  window.handleVerifyOtp = handleVerifyOtp;
   window.handleSignOut = handleSignOut;
   window.openCreatorStudio = openCreatorStudio;
   window.closeCreatorStudio = closeCreatorStudio;

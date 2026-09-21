@@ -5,11 +5,8 @@ import {
   isAuthorizedAdmin, 
   SECRET_ADMIN_EMAIL, 
   updateAuthUI, 
-  triggerGoogleSignIn, 
   handleEmailLogin,
   handleEmailSignUp,
-  handleSendOtp,
-  handleVerifyOtp,
   handleSignOut, 
   openCreatorStudio, 
   closeCreatorStudio 
@@ -19,11 +16,8 @@ export {
   currentUser, 
   isAuthorizedAdmin, 
   SECRET_ADMIN_EMAIL, 
-  triggerGoogleSignIn, 
   handleEmailLogin,
   handleEmailSignUp,
-  handleSendOtp,
-  handleVerifyOtp,
   handleSignOut, 
   openCreatorStudio, 
   closeCreatorStudio 
@@ -320,8 +314,10 @@ export function playMedia(title, url, resumeTime = 0, meta = {}) {
 
   mainVid.play().then(() => {
     if (window.updatePlayIcon) window.updatePlayIcon(true);
+    if (window.resetControlsTimer) window.resetControlsTimer();
   }).catch(() => {
     if (window.updatePlayIcon) window.updatePlayIcon(false);
+    if (window.showControls) window.showControls();
   });
 
   initVideoListeners(mainVid);
@@ -334,6 +330,8 @@ export function closePlayer() {
     saveContinueWatchingProgress(mainVid.currentTime, mainVid.duration);
     mainVid.pause();
   }
+  if (window.cancelControlsTimer) window.cancelControlsTimer();
+  if (window.showControls) window.showControls();
   if (document.fullscreenElement || document.webkitFullscreenElement) {
     if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
     else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
@@ -520,11 +518,8 @@ if (typeof window !== "undefined") {
   window.closePlayer = closePlayer;
   window.openMeModal = openMeModal;
   window.closeMeModal = closeMeModal;
-  window.triggerGoogleSignIn = triggerGoogleSignIn;
   window.handleEmailLogin = handleEmailLogin;
   window.handleEmailSignUp = handleEmailSignUp;
-  window.handleSendOtp = handleSendOtp;
-  window.handleVerifyOtp = handleVerifyOtp;
   window.handleSignOut = handleSignOut;
   window.openCreatorStudio = openCreatorStudio;
   window.closeCreatorStudio = closeCreatorStudio;

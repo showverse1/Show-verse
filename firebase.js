@@ -6,7 +6,8 @@ import {
   getFirestore, 
   setLogLevel,
   persistentLocalCache,
-  persistentMultipleTabManager 
+  persistentMultipleTabManager,
+  memoryLocalCache
 } from "firebase/firestore";
 
 export const firebaseConfig = {
@@ -27,12 +28,12 @@ try {
   authInstance = getAuth(appInstance);
   
   try {
-    setLogLevel('error');
+    // Silence internal Firestore transport connection retry logs
+    setLogLevel('silent');
   } catch (_) {}
 
   try {
     dbInstance = initializeFirestore(appInstance, {
-      experimentalForceLongPolling: true,
       experimentalAutoDetectLongPolling: true,
       localCache: persistentLocalCache({
         tabManager: persistentMultipleTabManager()
@@ -41,15 +42,20 @@ try {
   } catch (cacheErr) {
     try {
       dbInstance = initializeFirestore(appInstance, {
-        experimentalForceLongPolling: true,
-        experimentalAutoDetectLongPolling: true
+        experimentalAutoDetectLongPolling: true,
+        localCache: memoryLocalCache()
       });
     } catch (pollErr) {
-      dbInstance = getFirestore(appInstance);
+      try {
+        dbInstance = getFirestore(appInstance);
+      } catch (getErr) {
+        dbInstance = null;
+      }
     }
   }
 } catch (e) {
-  console.warn("Firebase initialization warning:", e ? (e.message || String(e)) : "init error");
+  // Silent fallback
+  dbInstance = null;
 }
 
 export const app = appInstance;

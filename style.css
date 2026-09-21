@@ -5,18 +5,42 @@
 /* High z-index hierarchy for video player controls */
 #playerModal {
   z-index: 9999;
+  transition: cursor 0.2s ease;
 }
 
 #playerTopBar {
   z-index: 40;
   position: relative;
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
 }
 
 #playerBottomBar {
   z-index: 40;
   position: relative;
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+/* Auto-hide overlay state during video playback */
+#playerModal.controls-hidden #playerTopBar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(-10px);
+}
+
+#playerModal.controls-hidden #playerBottomBar {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateY(10px);
+}
+
+#playerModal.controls-hidden {
+  cursor: none !important;
+}
+
+#playerModal.controls-hidden #playerStageContainer {
+  cursor: none !important;
 }
 
 #playerStageContainer {
