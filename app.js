@@ -818,26 +818,54 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
     if (window.showYtBufferingSpinner) window.showYtBufferingSpinner();
     if (window.initMainPlayerControlsAutoHide) window.initMainPlayerControlsAutoHide();
     if (window.attachMainPlayerSeekSkipListeners) window.attachMainPlayerSeekSkipListeners();
+    if (window.wipeAndAttachMainPlayerSeekSkipListeners) window.wipeAndAttachMainPlayerSeekSkipListeners();
     if (window.setupMainPlayerVideoListeners) window.setupMainPlayerVideoListeners(video);
     const targetUrl = episode.videoUrl || '';
     if (!targetUrl) {
       if (window.showToast) window.showToast("No video stream URL found for this episode.");
       return;
     }
-    video.src = targetUrl;
-    video.load();
+
+    if (window.mainHls) {
+      try {
+        window.mainHls.destroy();
+      } catch (e) {}
+      window.mainHls = null;
+      video._hls = null;
+    }
+
+    const isHls = targetUrl.includes('.m3u8');
+    if (isHls && window.Hls && window.Hls.isSupported()) {
+      const hls = new window.Hls({
+        enableWorker: true,
+        lowLatencyMode: true
+      });
+      hls.loadSource(targetUrl);
+      hls.attachMedia(video);
+      video._hls = hls;
+      window.mainHls = hls;
+      window.activeHls = hls;
+    } else {
+      video.src = targetUrl;
+      video.load();
+    }
 
     let seekTo = Number(resumeTime) || 0;
     if (seekTo <= 0 && typeof window.getContinueWatchingList === 'function') {
-      const saved = window.getContinueWatchingList().find(x => x.title && x.title.includes(cleanSeriesTitle(currentSelectedShow.title)));
+      const epTitle = `${cleanSeriesTitle(currentSelectedShow.title)} - Ep ${episode.episodeNumber}`;
+      const saved = window.getContinueWatchingList().find(x => x.id === episode.id || x.title === epTitle || (currentSelectedShow.category === 'Movie' && x.title && x.title.includes(cleanSeriesTitle(currentSelectedShow.title))));
       if (saved && saved.currentTime > 2) {
         seekTo = saved.currentTime;
       }
     }
 
     const applyResume = () => {
-      if (seekTo > 0 && video.duration && seekTo < video.duration) {
-        video.currentTime = seekTo;
+      if (seekTo > 0 && Number.isFinite(seekTo) && video.duration && seekTo < video.duration) {
+        if (typeof window.executeSafeSeek === 'function') {
+          window.executeSafeSeek(seekTo);
+        } else {
+          video.currentTime = seekTo;
+        }
         if (window.showToast) window.showToast(`Resumed Ep ${episode.episodeNumber} at ${formatDuration(seekTo)}`);
       }
     };
@@ -858,6 +886,10 @@ function loadActiveYtEpisode(index, resumeTime = 0) {
     }
 
     initYtVideoListeners();
+    if (typeof window.setupMainPlayerDelegatedEvents === 'function') window.setupMainPlayerDelegatedEvents();
+    if (typeof window.attachPlayerEvents === 'function') window.attachPlayerEvents();
+    if (typeof window.wipeAndAttachMainPlayerSeekSkipListeners === 'function') window.wipeAndAttachMainPlayerSeekSkipListeners();
+    if (typeof window.initMainPlayerControlsAutoHide === 'function') window.initMainPlayerControlsAutoHide();
   }
 }
 
@@ -956,6 +988,10 @@ export function switchYtEpisode(index) {
   currentSelectedEpisodeIndex = index;
   loadActiveYtEpisode(index);
   renderYtEpisodesRow();
+
+  if (typeof window.setupMainPlayerDelegatedEvents === 'function') window.setupMainPlayerDelegatedEvents();
+  if (typeof window.attachPlayerEvents === 'function') window.attachPlayerEvents();
+  if (typeof window.wipeAndAttachMainPlayerSeekSkipListeners === 'function') window.wipeAndAttachMainPlayerSeekSkipListeners();
 
   const stage = document.getElementById('ytPlayerStage');
   if (stage) {
@@ -1159,61 +1195,57 @@ export function skipMainVideo(seconds, e) {
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
   }
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
-  if (!video) return;
-
-  // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
-  if (isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) return;
-  if (isNaN(video.currentTime) || !Number.isFinite(video.currentTime)) {
-    video.currentTime = 0;
+  if (typeof window.executeMainPlayerSkip === 'function') {
+    return window.executeMainPlayerSkip(seconds);
   }
-
-  // 2. Safe Math for Skip:
-  if (seconds > 0) {
-    // For +10s:
-    video.currentTime = Math.min(video.currentTime + 10, video.duration);
-  } else {
-    // For -10s:
-    video.currentTime = Math.max(video.currentTime - 10, 0);
-  }
-
-  triggerYtSkipAnimation(seconds);
-  if (typeof window.resetMainPlayerControlsTimer === 'function') {
-    window.resetMainPlayerControlsTimer();
+  if (typeof window.executeSafeSeek === 'function') {
+    const video = document.getElementById('main-video') || document.getElementById('ytVideo') || document.getElementById('mainVideo');
+    if (!video || isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    const cur = (isNaN(video.currentTime) || !Number.isFinite(video.currentTime)) ? 0 : video.currentTime;
+    const secNum = Number(seconds) || 10;
+    const target = secNum > 0 ? Math.min(cur + 10, video.duration) : Math.max(cur - 10, 0);
+    window.executeSafeSeek(target);
+    triggerYtSkipAnimation(secNum);
+    return;
   }
 }
 export const skipYtTime = skipMainVideo;
 
 export function seekMainVideo(e) {
-  // 1. Stop Event Bubbling
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
   }
-  const video = document.getElementById('main-video') || document.getElementById('ytVideo');
+  if (typeof window.executeMainPlayerScrub === 'function') {
+    return window.executeMainPlayerScrub(e);
+  }
+  const video = document.getElementById('main-video') || document.getElementById('ytVideo') || document.getElementById('mainVideo');
   const mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
-  if (!video || !mainProgressBar) return;
+  if (!video || !mainProgressBar || isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) return;
+  
+  let clientX = e ? e.clientX : NaN;
+  if (typeof clientX !== 'number' || isNaN(clientX)) {
+    if (e && e.touches && e.touches[0] && typeof e.touches[0].clientX === 'number') {
+      clientX = e.touches[0].clientX;
+    } else if (e && e.changedTouches && e.changedTouches[0] && typeof e.changedTouches[0].clientX === 'number') {
+      clientX = e.changedTouches[0].clientX;
+    }
+  }
+  if (typeof clientX !== 'number' || isNaN(clientX)) return;
 
-  // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
-  if (isNaN(video.duration) || !Number.isFinite(video.duration) || video.duration <= 0) return;
-  if (!e || typeof e.clientX !== 'number' || isNaN(e.clientX)) return;
-
-  // 3. Safe Math for Timeline Scrubbing:
   const rect = mainProgressBar.getBoundingClientRect();
   if (!rect.width || isNaN(rect.width) || rect.width <= 0) return;
-  const pos = (e.clientX - rect.left) / rect.width;
+  const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   if (isNaN(pos) || !Number.isFinite(pos)) return;
 
-  video.currentTime = Math.max(0, Math.min(pos * video.duration, video.duration));
-
-  const fill = document.getElementById('main-progress-fill');
-  if (fill && video.duration > 0) {
-    fill.style.width = `${Math.min(100, Math.max(0, (video.currentTime / video.duration) * 100))}%`;
-  }
-
-  if (typeof window.resetMainPlayerControlsTimer === 'function') {
-    window.resetMainPlayerControlsTimer();
+  const targetTime = Math.max(0, Math.min(pos * video.duration, video.duration));
+  if (typeof window.executeSafeSeek === 'function') {
+    window.executeSafeSeek(targetTime);
+  } else {
+    video.currentTime = targetTime;
   }
 }
 export const seekYtVideo = seekMainVideo;

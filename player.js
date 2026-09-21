@@ -247,7 +247,7 @@ export function showMainPlayerControls() {
 }
 
 export function getMainVideoElement() {
-  return document.getElementById('main-video') || document.getElementById('ytVideo');
+  return document.getElementById('main-video') || document.getElementById('ytVideo') || document.getElementById('mainVideo');
 }
 
 export function hideMainPlayerControls() {
@@ -318,149 +318,331 @@ export function hideYtBufferingSpinner() {
   }
 }
 
+// ========================================================
+// BULLETPROOF NUCLEAR SEEK & SKIP CONTROLLER FOR MAIN PLAYER
+// ========================================================
+
+/**
+ * Safe Seek Engine:
+ * 1. Pause video immediately when seek is initiated.
+ * 2. Update currentTime using safe boundaries (min 0, max duration).
+ * 3. Only call play() again once the seeked event fires.
+ * 4. HLS.js / Video.js check: Ensure correct API wrapper readiness.
+ */
+export function executeSafeSeek(targetTime) {
+  const mainVideo = getMainVideoElement();
+  if (!mainVideo) return;
+
+  // Duration & readiness validation - prevent NaN or non-positive durations
+  if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) {
+    console.warn("Seek aborted: video duration is NaN, non-finite, or <= 0:", mainVideo.duration);
+    return;
+  }
+
+  // If readyState is 0 (HAVE_NOTHING), media stream not buffered yet
+  if (typeof mainVideo.readyState === 'number' && mainVideo.readyState < 1) {
+    console.warn("Seek aborted: video readyState < 1 (HAVE_NOTHING).");
+    return;
+  }
+
+  const numTarget = Number(targetTime);
+  if (isNaN(numTarget) || !Number.isFinite(numTarget)) {
+    console.warn("Seek aborted: targetTime is NaN or not finite:", targetTime);
+    return;
+  }
+
+  // Safe boundaries: strictly clamp between 0 and mainVideo.duration
+  const safeTime = Math.max(0, Math.min(mainVideo.duration, numTarget));
+  if (isNaN(safeTime) || !Number.isFinite(safeTime)) return;
+
+  const wasPlaying = !mainVideo.paused && !mainVideo.ended;
+
+  // 1. Pause video immediately when seek is initiated
+  try {
+    mainVideo.pause();
+  } catch (err) {
+    console.warn("Pause on seek notice:", err);
+  }
+
+  // 2. HLS.js Check: ensure stream buffer loads for targeted time
+  const hls = mainVideo._hls || window.mainHls || window.activeHls || window.hls;
+  if (hls && typeof hls.startLoad === 'function') {
+    try {
+      hls.startLoad(safeTime);
+    } catch (e) {
+      console.warn("HLS startLoad notice:", e);
+    }
+  }
+
+  // 3. Only resume play() once the seeked event fires
+  let seekFallbackTimeout = null;
+  const onSeeked = () => {
+    if (seekFallbackTimeout) {
+      clearTimeout(seekFallbackTimeout);
+      seekFallbackTimeout = null;
+    }
+    mainVideo.removeEventListener('seeked', onSeeked);
+
+    if (wasPlaying) {
+      const playPromise = mainVideo.play();
+      if (playPromise !== undefined) {
+        playPromise.then(() => {
+          if (typeof window.updateYtPlayIcon === 'function') {
+            window.updateYtPlayIcon(true);
+          }
+        }).catch(() => {
+          if (typeof window.updateYtPlayIcon === 'function') {
+            window.updateYtPlayIcon(false);
+          }
+        });
+      }
+    }
+  };
+
+  mainVideo.addEventListener('seeked', onSeeked, { once: true });
+  seekFallbackTimeout = setTimeout(() => {
+    onSeeked();
+  }, 750);
+
+  // Update currentTime within safe boundaries
+  try {
+    mainVideo.currentTime = safeTime;
+  } catch (err) {
+    console.warn("Error setting mainVideo.currentTime:", err);
+  }
+
+  // Instantly update progress bar fills and time displays
+  const fill = document.getElementById('main-progress-fill');
+  if (fill && mainVideo.duration > 0) {
+    fill.style.width = `${Math.min(100, Math.max(0, (safeTime / mainVideo.duration) * 100))}%`;
+  }
+  const modalFill = document.getElementById('progressBar');
+  if (modalFill && mainVideo.duration > 0) {
+    modalFill.style.width = `${Math.min(100, Math.max(0, (safeTime / mainVideo.duration) * 100))}%`;
+  }
+  const mainTimeDisplay = document.getElementById('main-time-display');
+  if (mainTimeDisplay && typeof window.formatDuration === 'function') {
+    mainTimeDisplay.innerText = `${window.formatDuration(safeTime)} / ${window.formatDuration(mainVideo.duration)}`;
+  }
+
+  if (typeof window.resetMainPlayerControlsTimer === 'function') {
+    window.resetMainPlayerControlsTimer();
+  }
+}
+
+export function executeMainPlayerSkip(seconds) {
+  const mainVideo = getMainVideoElement();
+  if (!mainVideo) return;
+
+  // 1. Duration & NaN Check: Before applying any time change
+  if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) {
+    console.warn("Skip aborted: video duration not ready or invalid.");
+    return;
+  }
+  const curTime = (isNaN(mainVideo.currentTime) || !Number.isFinite(mainVideo.currentTime)) ? 0 : mainVideo.currentTime;
+
+  // 2. Safe Math for Skip: min 0, max duration
+  const secNum = Number(seconds) || 10;
+  let targetTime;
+  if (secNum > 0) {
+    targetTime = Math.min(curTime + 10, mainVideo.duration);
+  } else {
+    targetTime = Math.max(curTime - 10, 0);
+  }
+
+  executeSafeSeek(targetTime);
+
+  if (typeof window.triggerYtSkipAnimation === 'function') {
+    window.triggerYtSkipAnimation(secNum);
+  }
+}
+
+export function executeMainPlayerScrub(e, barElement) {
+  const mainVideo = getMainVideoElement();
+  const mainProgressBar = barElement || document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
+  if (!mainVideo || !mainProgressBar) return;
+
+  // 1. Duration & NaN Check
+  if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) {
+    console.warn("Scrub aborted: video duration not ready or invalid.");
+    return;
+  }
+
+  let clientX = e ? e.clientX : NaN;
+  if (typeof clientX !== 'number' || isNaN(clientX)) {
+    if (e && e.touches && e.touches[0] && typeof e.touches[0].clientX === 'number') {
+      clientX = e.touches[0].clientX;
+    } else if (e && e.changedTouches && e.changedTouches[0] && typeof e.changedTouches[0].clientX === 'number') {
+      clientX = e.changedTouches[0].clientX;
+    }
+  }
+  if (typeof clientX !== 'number' || isNaN(clientX)) return;
+
+  const rect = mainProgressBar.getBoundingClientRect();
+  if (!rect.width || isNaN(rect.width) || rect.width <= 0) return;
+
+  // 2. Safe Math for Scrubbing: clamp pos between 0.0 and 1.0
+  const pos = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  if (isNaN(pos) || !Number.isFinite(pos)) return;
+
+  const targetTime = Math.max(0, Math.min(pos * mainVideo.duration, mainVideo.duration));
+  executeSafeSeek(targetTime);
+}
+
 export function skipMainVideo(seconds, e) {
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
   }
-  const mainVideo = getMainVideoElement();
-  if (!mainVideo) return;
-
-  // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
-  if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
-  if (isNaN(mainVideo.currentTime) || !Number.isFinite(mainVideo.currentTime)) {
-    mainVideo.currentTime = 0;
-  }
-
-  // 2. Safe Math for Skip:
-  if (seconds > 0) {
-    // For +10s:
-    mainVideo.currentTime = Math.min(mainVideo.currentTime + 10, mainVideo.duration);
-  } else {
-    // For -10s:
-    mainVideo.currentTime = Math.max(mainVideo.currentTime - 10, 0);
-  }
-
-  if (typeof window.triggerYtSkipAnimation === 'function') {
-    window.triggerYtSkipAnimation(seconds);
-  }
-  resetMainPlayerControlsTimer();
+  executeMainPlayerSkip(Number(seconds) || 10);
 }
 
 export function seekMainVideo(e) {
-  // 1. Stop Event Bubbling
   if (e) {
     if (typeof e.preventDefault === 'function') e.preventDefault();
     if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
   }
-  const mainVideo = getMainVideoElement();
-  const mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
-  if (!mainVideo || !mainProgressBar) return;
-
-  // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
-  if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
-  if (!e || typeof e.clientX !== 'number' || isNaN(e.clientX)) return;
-
-  // 3. Safe Math for Timeline Scrubbing:
-  const rect = mainProgressBar.getBoundingClientRect();
-  if (!rect.width || isNaN(rect.width) || rect.width <= 0) return;
-  const pos = (e.clientX - rect.left) / rect.width;
-  if (isNaN(pos) || !Number.isFinite(pos)) return;
-
-  mainVideo.currentTime = Math.max(0, Math.min(pos * mainVideo.duration, mainVideo.duration));
-
-  const fill = document.getElementById('main-progress-fill');
-  if (fill && mainVideo.duration > 0) {
-    fill.style.width = `${Math.min(100, Math.max(0, (mainVideo.currentTime / mainVideo.duration) * 100))}%`;
-  }
-
-  resetMainPlayerControlsTimer();
+  executeMainPlayerScrub(e);
 }
 
-export function attachMainPlayerSeekSkipListeners() {
-  // 5. Ensure these event listeners are attached strictly to the main player UI elements and only attached ONCE.
-  const skipFwd = document.getElementById('main-skip-forward');
-  if (skipFwd && !skipFwd._skipListenerBound) {
-    skipFwd._skipListenerBound = true;
+/**
+ * EVENT DELEGATION FOR MAIN PLAYER CONTROLS
+ * Permanent capture listener on `document` so that dynamically re-rendered episode
+ * buttons or replaced player nodes never lose their safe math logic.
+ */
+let isDelegationAttached = false;
+export function setupMainPlayerDelegatedEvents() {
+  if (isDelegationAttached) return;
+  isDelegationAttached = true;
+
+  const handleDelegatedAction = (e) => {
+    if (!e || !e.target) return;
+
+    // 1. Skip Forward Button Match (.skip-button-class, #main-skip-forward, .skip-forward-btn)
+    const fwdBtn = e.target.closest('#main-skip-forward, .skip-forward-btn, .main-skip-forward-btn, [data-action="skip-forward"], button[title*="Fast-forward"], button[aria-label*="Fast-forward"]');
+    if (fwdBtn) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      executeMainPlayerSkip(10);
+      return;
+    }
+
+    // 2. Skip Backward Button Match (.skip-button-class, #main-skip-backward, .skip-backward-btn)
+    const backBtn = e.target.closest('#main-skip-backward, .skip-backward-btn, .main-skip-backward-btn, [data-action="skip-backward"], button[title*="Rewind"], button[aria-label*="Rewind"]');
+    if (backBtn) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      executeMainPlayerSkip(-10);
+      return;
+    }
+
+    // 3. General .skip-button-class match if neither matched directly
+    const generalSkipBtn = e.target.closest('.skip-button-class, .skip-btn');
+    if (generalSkipBtn) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      const isFwd = generalSkipBtn.id.includes('forward') ||
+                    generalSkipBtn.classList.contains('skip-forward-btn') ||
+                    (generalSkipBtn.getAttribute('title') && generalSkipBtn.getAttribute('title').toLowerCase().includes('forward')) ||
+                    (generalSkipBtn.innerText && generalSkipBtn.innerText.includes('+')) ||
+                    Boolean(generalSkipBtn.querySelector('[data-lucide="rotate-cw"]'));
+      executeMainPlayerSkip(isFwd ? 10 : -10);
+      return;
+    }
+
+    // 4. Timeline Progress Bar Match (.timeline-class, .timeline-bar, #main-progress-bar)
+    const timeline = e.target.closest('#main-progress-bar, .timeline-class, .timeline-bar, .main-timeline-bar, #ytScrubContainer, [data-action="seek-timeline"]');
+    if (timeline) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      executeMainPlayerScrub(e, timeline);
+      return;
+    }
+  };
+
+  // Attach in capturing phase to intercept before any inline or bubbling tap handlers
+  document.addEventListener('click', handleDelegatedAction, true);
+
+  // Prevent background taps on player stage when clicking controls
+  document.addEventListener('pointerdown', (e) => {
+    if (e.target && e.target.closest('#main-skip-forward, #main-skip-backward, #main-progress-bar, .skip-button-class, .timeline-class')) {
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
+  }, true);
+}
+
+// Ensure delegation is initialized immediately on script evaluation
+if (typeof document !== 'undefined') {
+  setupMainPlayerDelegatedEvents();
+}
+
+/**
+ * Direct binding fallback:
+ * Also clone and attach direct listeners as a secondary safeguard.
+ */
+export function wipeAndAttachMainPlayerSeekSkipListeners() {
+  setupMainPlayerDelegatedEvents();
+
+  let skipFwd = document.getElementById('main-skip-forward');
+  if (skipFwd && skipFwd.parentNode) {
+    const newFwd = skipFwd.cloneNode(true);
+    skipFwd.parentNode.replaceChild(newFwd, skipFwd);
+    skipFwd = newFwd;
+  }
+
+  let skipBack = document.getElementById('main-skip-backward');
+  if (skipBack && skipBack.parentNode) {
+    const newBack = skipBack.cloneNode(true);
+    skipBack.parentNode.replaceChild(newBack, skipBack);
+    skipBack = newBack;
+  }
+
+  let mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
+  if (mainProgressBar && mainProgressBar.parentNode) {
+    const newBar = mainProgressBar.cloneNode(true);
+    mainProgressBar.parentNode.replaceChild(newBar, mainProgressBar);
+    mainProgressBar = newBar;
+  }
+
+  if (window.lucide && typeof window.lucide.createIcons === 'function') {
+    window.lucide.createIcons();
+  }
+
+  if (skipFwd) {
     skipFwd.addEventListener('click', (e) => {
-      // 1. Stop Event Bubbling: prevent triggering main video wrapper's play/pause toggle
       e.preventDefault();
       e.stopPropagation();
-
-      const mainVideo = getMainVideoElement();
-      if (!mainVideo) return;
-      // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
-      if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
-      if (isNaN(mainVideo.currentTime) || !Number.isFinite(mainVideo.currentTime)) {
-        mainVideo.currentTime = 0;
-      }
-
-      // 2. Safe Math for Skip: For +10s
-      mainVideo.currentTime = Math.min(mainVideo.currentTime + 10, mainVideo.duration);
-
-      if (typeof window.triggerYtSkipAnimation === 'function') {
-        window.triggerYtSkipAnimation(10);
-      }
-      resetMainPlayerControlsTimer();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      executeMainPlayerSkip(10);
     });
   }
 
-  const skipBack = document.getElementById('main-skip-backward');
-  if (skipBack && !skipBack._skipListenerBound) {
-    skipBack._skipListenerBound = true;
+  if (skipBack) {
     skipBack.addEventListener('click', (e) => {
-      // 1. Stop Event Bubbling: prevent triggering main video wrapper's play/pause toggle
       e.preventDefault();
       e.stopPropagation();
-
-      const mainVideo = getMainVideoElement();
-      if (!mainVideo) return;
-      // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
-      if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
-      if (isNaN(mainVideo.currentTime) || !Number.isFinite(mainVideo.currentTime)) {
-        mainVideo.currentTime = 0;
-      }
-
-      // 2. Safe Math for Skip: For -10s
-      mainVideo.currentTime = Math.max(mainVideo.currentTime - 10, 0);
-
-      if (typeof window.triggerYtSkipAnimation === 'function') {
-        window.triggerYtSkipAnimation(-10);
-      }
-      resetMainPlayerControlsTimer();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      executeMainPlayerSkip(-10);
     });
   }
 
-  const mainProgressBar = document.getElementById('main-progress-bar') || document.getElementById('ytScrubContainer');
-  if (mainProgressBar && !mainProgressBar._seekListenerBound) {
-    mainProgressBar._seekListenerBound = true;
+  if (mainProgressBar) {
     mainProgressBar.addEventListener('click', (e) => {
-      // 1. Stop Event Bubbling: prevent triggering main video wrapper's play/pause toggle
       e.preventDefault();
       e.stopPropagation();
-
-      const mainVideo = getMainVideoElement();
-      if (!mainVideo) return;
-      // 4. NaN Check: Before applying any time change, check if (isNaN(mainVideo.duration)) return;
-      if (isNaN(mainVideo.duration) || !Number.isFinite(mainVideo.duration) || mainVideo.duration <= 0) return;
-      if (!e || typeof e.clientX !== 'number' || isNaN(e.clientX)) return;
-
-      // 3. Safe Math for Timeline Scrubbing:
-      const rect = mainProgressBar.getBoundingClientRect();
-      if (!rect.width || isNaN(rect.width) || rect.width <= 0) return;
-      const pos = (e.clientX - rect.left) / rect.width;
-      if (isNaN(pos) || !Number.isFinite(pos)) return;
-
-      mainVideo.currentTime = Math.max(0, Math.min(pos * mainVideo.duration, mainVideo.duration));
-
-      const fill = document.getElementById('main-progress-fill');
-      if (fill && mainVideo.duration > 0) {
-        fill.style.width = `${Math.min(100, Math.max(0, (mainVideo.currentTime / mainVideo.duration) * 100))}%`;
-      }
-      resetMainPlayerControlsTimer();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      executeMainPlayerScrub(e, mainProgressBar);
     });
   }
 }
+export const attachMainPlayerSeekSkipListeners = wipeAndAttachMainPlayerSeekSkipListeners;
+export const attachPlayerEvents = wipeAndAttachMainPlayerSeekSkipListeners;
 
 export function setupMainPlayerVideoListeners(video) {
   if (!video || video._mainListenersAttached) return;
@@ -1007,5 +1189,11 @@ if (typeof window !== "undefined") {
   window.skipYtTime = skipMainVideo;
   window.seekYtVideo = seekMainVideo;
   window.attachMainPlayerSeekSkipListeners = attachMainPlayerSeekSkipListeners;
+  window.wipeAndAttachMainPlayerSeekSkipListeners = wipeAndAttachMainPlayerSeekSkipListeners;
+  window.attachPlayerEvents = attachPlayerEvents;
+  window.setupMainPlayerDelegatedEvents = setupMainPlayerDelegatedEvents;
+  window.executeMainPlayerSkip = executeMainPlayerSkip;
+  window.executeMainPlayerScrub = executeMainPlayerScrub;
+  window.executeSafeSeek = executeSafeSeek;
   window.getMainVideoElement = getMainVideoElement;
 }
